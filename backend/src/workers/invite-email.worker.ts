@@ -26,6 +26,7 @@ import { ReportRepository } from "#root/modules/reports/repositories/index.js";
 import { ItemRepository } from "#root/shared/database/providers/mongo/repositories/ItemRepository.js";
 import { EnrollmentService } from "#root/modules/users/services/EnrollmentService.js";
 import { ProgressService } from "#root/modules/users/services/ProgressService.js";
+import { HealthPointsRepository } from "#shared/database/providers/mongo/repositories/HealthPointsRepository.js";
 import { FeedbackRepository } from "#root/modules/quizzes/repositories/providers/mongodb/FeedbackRepository.js";
 
 interface WorkerData {
@@ -79,8 +80,9 @@ const submissionRepo = new SubmissionRepository(database)
 const userQuizMetricsRepo = new UserQuizMetricsRepository(database)
 const quizRepo = new QuizRepository(database)
 const feedbackRepo = new FeedbackRepository(database)
+const healthPointsRepo = new HealthPointsRepository(database)
 const progressService = new ProgressService(progressRepo, submissionRepo, courseRepo, settingsRepo, userRepo, itemRepo, enrollmentRepo, userQuizMetricsRepo, quizRepo, projectSubmissionRepo, feedbackRepo, database)
-const enrollmentService = new EnrollmentService(enrollmentRepo, courseRepo, userRepo, itemRepo, courseRegistrationRepo, progressService, inviteRepo, progressRepo, database)
+const enrollmentService = new EnrollmentService(enrollmentRepo, courseRepo, userRepo, itemRepo, courseRegistrationRepo, progressService, inviteRepo, progressRepo, healthPointsRepo, database)
 const inviteService = new InviteService(inviteRepo, userRepo, courseRepo, enrollmentRepo, mailService, itemRepo, enrollmentService, database);
 
 (async () => {

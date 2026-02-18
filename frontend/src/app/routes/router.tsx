@@ -41,6 +41,8 @@ import CourseRegistration from '../pages/student/CourseRegistration'
 import CourseIssueReports from '../pages/student/FlagResponse'
 // import LoginPage from '../pages/LoginPage'
 import FeedbackFormEditor from '../pages/teacher/FeedbackFormEditor'
+import { HealthPointsOverview } from '../pages/teacher/HealthPointsOverview'
+import { HealthPointsDetail } from '../pages/teacher/HealthPointsDetail'
 import Leaderboard from '../pages/student/leaderboard'
 import StudentLogin from '../pages/student/StudentLogin'
 import TeacherLogin from '../pages/teacher/TeacherLogin'
@@ -331,6 +333,20 @@ const teacherAIWorkflowSectionRoute = new Route({
   component: AiWorkflow,
 });
 
+// Teacher Health Points Overview
+const teacherHealthPointsRoute = new Route({
+  getParentRoute: () => teacherLayoutRoute,
+  path: '/courses/healthPoints',
+  component: HealthPointsOverview,
+});
+
+// Teacher Health Points Detail
+const teacherHealthPointsDetailRoute = new Route({
+  getParentRoute: () => teacherLayoutRoute,
+  path: '/courses/healthPoints/student',
+  component: HealthPointsDetail,
+});
+
 // Student dashboard route
 const studentDashboardRoute = new Route({
   getParentRoute: () => studentLayoutRoute,
@@ -445,21 +461,21 @@ const testAISectionModalRoute = new Route({
 
 //student login route
 export const studentLoginRoute = new Route({
-  getParentRoute: ()=> rootRoute,
+  getParentRoute: () => rootRoute,
   path: '/student/login',
   component: StudentLogin
 })
 
 //teacher login route
 export const teacherLoginRoute = new Route({
-  getParentRoute: ()=> rootRoute,
+  getParentRoute: () => rootRoute,
   path: '/teacher/login',
   component: TeacherLogin
 })
 
 //select role route
 export const selectRoleRoute = new Route({
-  getParentRoute: ()=> rootRoute,
+  getParentRoute: () => rootRoute,
   path: '/select-role',
   component: SelectRolePage
 })
@@ -489,7 +505,9 @@ const routeTree = rootRoute.addChildren([
     teacherCourseAnomaliesRoute,
     teacherCourseInstructorsRoute,
     teacherCourseRegistrationRequests,
-    teacherFeedBackEditorRoute
+    teacherFeedBackEditorRoute,
+    teacherHealthPointsRoute,
+    teacherHealthPointsDetailRoute
   ]),
   studentLayoutRoute.addChildren([
     studentDashboardRoute,

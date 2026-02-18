@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useNavigate } from "@tanstack/react-router"
-import { Search, Users, TrendingUp, CheckCircle, RotateCcw, UserX, BookOpen, FileText, List, Play, AlertTriangle, X, Loader2, Eye, Clock, ChevronRight, ChevronDown, ArrowUp, ArrowDown, BarChart3, Download, FileDown, CheckSquare } from 'lucide-react'
+import { Search, Users, TrendingUp, CheckCircle, RotateCcw, UserX, BookOpen, FileText, List, Play, AlertTriangle, X, Loader2, Eye, Clock, ChevronRight, ChevronDown, ArrowUp, ArrowDown, BarChart3, Download, FileDown, CheckSquare, Heart } from 'lucide-react'
 import { Pagination } from "@/components/ui/Pagination"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -886,6 +886,14 @@ export default function CourseEnrollments() {
                 Inactive Students
               </TabsTrigger>
             </TabsList>
+            <Button
+              variant="outline"
+              onClick={() => navigate({ to: '/teacher/courses/healthPoints' })}
+              className="flex items-center gap-2"
+            >
+              <Heart className="h-4 w-4" />
+              Manage Health Points
+            </Button>
           </div>
           {/* Active Tab */}
           <TabsContent value="ACTIVE" className="mt-4">
@@ -997,17 +1005,17 @@ export default function CourseEnrollments() {
                       onClick={() => setShowContentSummary(prev => !prev)}
                       className="flex items-center gap-2 px-3 py-2 text-sm font-medium hover:bg-muted/20 rounded-md"
                     > */}
-                     <p>Content Summary</p> 
-                      {/* {showContentSummary ? (
+                    <p>Content Summary</p>
+                    {/* {showContentSummary ? (
                       <ChevronDown className="h-4 w-4" />
                     ) : (
                       <ChevronRight className="h-4 w-4" />
                     )} */}
                     {/* </button> */}
-                      <div className= "flex justify-between items-center mt-2 mb-2">
-                    <p className="text-sm text-muted-foreground mb-2">Completion Percentage</p>
-                    <EnrollmentProgress progress={(selectedUser.progress || 0)} />
-                        </div>
+                    <div className="flex justify-between items-center mt-2 mb-2">
+                      <p className="text-sm text-muted-foreground mb-2">Completion Percentage</p>
+                      <EnrollmentProgress progress={(selectedUser.progress || 0)} />
+                    </div>
                     {/* Body */}
                     {
                       // showContentSummary &&

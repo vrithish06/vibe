@@ -1,13 +1,14 @@
-import {ContainerModule} from 'inversify';
+import { ContainerModule } from 'inversify';
 import {
   MongoDatabase,
   UserRepository,
   HttpErrorHandler,
   SettingRepository,
 } from '#shared/index.js';
-import {GLOBAL_TYPES} from './types.js';
-import {dbConfig} from './config/db.js';
-import {CourseRepository} from '#shared/database/providers/mongo/repositories/CourseRepository.js';
+import { GLOBAL_TYPES } from './types.js';
+import { dbConfig } from './config/db.js';
+import { CourseRepository } from '#shared/database/providers/mongo/repositories/CourseRepository.js';
+import { HealthPointsRepository } from '#shared/database/providers/mongo/repositories/HealthPointsRepository.js';
 import { FirebaseAuthService } from './modules/auth/services/FirebaseAuthService.js';
 import { ProgressService } from './modules/users/services/ProgressService.js';
 import { EnrollmentService } from './modules/users/services/EnrollmentService.js';
@@ -36,7 +37,9 @@ export const sharedContainerModule = new ContainerModule(options => {
     .to(SettingRepository)
     .inSingletonScope();
 
+  options.bind(HealthPointsRepository).toSelf().inSingletonScope();
+
   // Other
   options.bind(HttpErrorHandler).toSelf().inSingletonScope();
-}); 
+});
 
