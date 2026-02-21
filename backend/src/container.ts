@@ -11,6 +11,7 @@ import { CourseRepository } from '#shared/database/providers/mongo/repositories/
 import { FirebaseAuthService } from './modules/auth/services/FirebaseAuthService.js';
 import { ProgressService } from './modules/users/services/ProgressService.js';
 import { EnrollmentService } from './modules/users/services/EnrollmentService.js';
+import { HealthPointsRepository } from '#shared/database/providers/mongo/repositories/HealthPointsRepository.js';
 
 
 
