@@ -22,7 +22,7 @@ import type { ProctoringSettings } from '@/types/video.types';
 import { InviteBody, InviteResponse, MessageResponse } from '@/types/invite.types';
 import { EntityType, IReport, ReportStatus } from '@/types/flag.types';
 import { PendingRegistrationNotification, ApprovedRegistrationNotification } from '@/types/notification.types';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { VersionWithCourse } from '@/app/pages/student/CourseRegistration';
 import { Registration, RegistrationStatus } from '@/app/pages/teacher/CourseRegistrationRequests';
 import { Field } from '@/app/pages/teacher/components/course-registration-modal';
@@ -398,8 +398,6 @@ export function useAnomaliesByCourseItem(
   };
 }
 
-// Auth hooks
-
 // POST /auth/verify
 export function useLogin(): {
   data: components['schemas']['TokenVerificationResponse'] | undefined,
@@ -415,6 +413,154 @@ export function useLogin(): {
     error: result.error ? (result.error.message || 'Login failed') : null,
     refetch: result.refetch
   };
+}
+
+// Activity hooks
+export function useActivitiesForTeacher(courseVersionId: string, cohortId?: string): {
+  data: any[],
+  isLoading: boolean,
+  error: string | null,
+  refetch: () => void
+} {
+  // Since we don't have the OpenAPI schema for this yet, we'll use a custom fetch wrapper similar to useAnomaliesByCourseItem
+  const url = cohortId
+    ? `${import.meta.env.VITE_BASE_URL}/activities/teacher/course/${courseVersionId}?cohortId=${cohortId}`
+    : `${import.meta.env.VITE_BASE_URL}/activities/teacher/course/${courseVersionId}`;
+
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['activities', courseVersionId, cohortId],
+    queryFn: async () => {
+      const token = localStorage.getItem("firebase-auth-token");
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        throw new Error('Failed to fetch activities');
+      }
+      return res.json();
+    },
+    enabled: !!courseVersionId,
+  });
+
+  return {
+    data: data || [],
+    isLoading,
+    error: error ? error.message : null,
+    refetch
+  };
+}
+
+export function useActivitiesForStudent(courseVersionId: string, cohortId?: string): {
+  data: any[],
+  isLoading: boolean,
+  error: string | null,
+  refetch: () => void
+} {
+  const url = cohortId
+    ? `${import.meta.env.VITE_BASE_URL}/activities/student/course/${courseVersionId}?cohortId=${cohortId}`
+    : `${import.meta.env.VITE_BASE_URL}/activities/student/course/${courseVersionId}`;
+
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['student-activities', courseVersionId, cohortId],
+    queryFn: async () => {
+      const token = localStorage.getItem("firebase-auth-token");
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        throw new Error('Failed to fetch activities');
+      }
+      return res.json();
+    },
+    enabled: !!courseVersionId,
+  });
+
+  return {
+    data: Array.isArray(data) ? data : (data as any)?.activities || [],
+    isLoading,
+    error: error ? (error as Error).message : null,
+    refetch
+  };
+}
+
+export function useDeleteActivity() {
+  return useMutation({
+    mutationFn: async (activityId: string) => {
+      const token = localStorage.getItem("firebase-auth-token");
+      const url = `${import.meta.env.VITE_BASE_URL}/activities/${activityId}`;
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        let msg = 'Failed to delete activity';
+        try {
+          const data = await res.json();
+          if (data.message) msg = data.message;
+        } catch (e) { }
+        throw new Error(msg);
+      }
+      return true; // Return success status
+    }
+  });
+}
+
+
+export function useUpdateActivity() {
+  return useMutation({
+    mutationFn: async ({ activityId, data }: { activityId: string; data: any }) => {
+      const token = localStorage.getItem("firebase-auth-token");
+      const url = `${import.meta.env.VITE_BASE_URL}/activities/${activityId}`;
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) {
+        let msg = 'Failed to update activity';
+        try {
+          const result = await res.json();
+          if (result.message) msg = result.message;
+        } catch (e) { }
+        throw new Error(msg);
+      }
+      return res.json();
+    }
+  });
+}
+
+export function useSubmitActivity() {
+  return useMutation({
+    mutationFn: async (activityId: string) => {
+      const token = localStorage.getItem("firebase-auth-token");
+      const url = `${import.meta.env.VITE_BASE_URL}/activities/${activityId}/submit`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!res.ok) {
+        let msg = 'Failed to submit activity';
+        try {
+          const result = await res.json();
+          if (result.message) msg = result.message;
+        } catch (e) { }
+        throw new Error(msg);
+      }
+      return res.json();
+    }
+  });
 }
 
 // POST /auth/google
@@ -4182,7 +4328,7 @@ export function useMarkNotificationAsRead(): {
   status: 'idle' | 'pending' | 'success' | 'error'
 } {
   const result = api.useMutation("patch", "/course/registration/notifications/{registrationId}/read");
-  
+
   return {
     ...result,
     error: result.error ? (result.error.message || 'Failed to mark notification as read') : null
@@ -4196,7 +4342,7 @@ export const useBulkUnenrollUsers = () => {
 };
 
 // GET /users/enrollments
-export function useUserEnrollmentsDetails( enabled: boolean = true, search?: string, role = "STUDENT", courseVersionId?: string, ): {
+export function useUserEnrollmentsDetails(enabled: boolean = true, search?: string, role = "STUDENT", courseVersionId?: string,): {
   data: components['schemas']['EnrollmentResponse'] | undefined,
   isLoading: boolean,
   error: string | null,
@@ -4204,7 +4350,7 @@ export function useUserEnrollmentsDetails( enabled: boolean = true, search?: str
 } {
   const result = api.useQuery("get", "/users/enrollments/details", {
     params: {
-      query: {  search, role, courseVersionId  }
+      query: { search, role, courseVersionId }
     },
     enabled: enabled
   });

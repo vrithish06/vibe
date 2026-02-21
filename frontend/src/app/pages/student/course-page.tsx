@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useCourseVersionById, useUserProgress, useItemsBySectionId, useItemById, useProctoringSettings, useGetProcotoringSettings, useSubmitFlag, enqueueNavigation, useSkipOptionalItem, useRecalculateStudentProgress } from "@/hooks/hooks";
+import { useCourseVersionById, useUserProgress, useItemsBySectionId, useItemById, useProctoringSettings, useGetProcotoringSettings, useSubmitFlag, enqueueNavigation, useSkipOptionalItem, useRecalculateStudentProgress, useActivitiesForStudent, useSubmitActivity } from "@/hooks/hooks";
 import { useAuthStore } from "@/store/auth-store";
 import { useCourseStore } from "@/store/course-store";
 import { Link, Navigate, useRouter } from "@tanstack/react-router";
@@ -41,7 +41,7 @@ import {
   X,
   CircleCheckIcon,
   Headphones,
-  ExternalLink,Menu
+  ExternalLink, Menu
 } from "lucide-react";
 import FloatingVideo, { FloatingVideoPlaceholder } from "@/components/floating-video";
 import type { itemref } from "@/types/course.types";
@@ -56,6 +56,20 @@ import { registerStream, unRegisterStream } from "@/lib/MediaRegistry";
 import { useModuleProgress } from "@/hooks/hooks";
 import { isMobile } from "react-device-detect";
 import MobileFallbackScreen from "@/components/MobileFallbackScreen";
+
+// Helper: extract a plain string from a MongoDB _id ({ $oid: '...' }, ObjectId instances, or plain string)
+const getIdStr = (id: any): string => {
+  if (!id) return '';
+  if (typeof id === 'string') return id;
+  if (typeof id === 'object') {
+    if (id.$oid) return id.$oid;
+    if (id.toString && typeof id.toString === 'function') {
+      const s = id.toString();
+      if (s !== '[object Object]') return s;
+    }
+  }
+  return String(id);
+};
 
 // Helper function to get icon for item type
 const getItemIcon = (type: string) => {
@@ -109,7 +123,7 @@ export default function CoursePage() {
   const [allProctorsDisabled, setAllProctorsDisabled] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
 
-  
+
 
   // Check for microphone and camera access, otherwise redirect to dashboard
   useEffect(() => {
@@ -183,8 +197,40 @@ export default function CoursePage() {
   const [anomalies, setAnomalies] = useState<string[]>([]);
   const [isQuizSkipped, setIsQuizSkipped] = useState(false);
   const [readyToDetect, setReadyToDetect] = useState(false);
-   // State for sidebar visibility
+  // State for sidebar visibility
   const [isDesktopSidebarVisible, setIsDesktopSidebarVisible] = useState(true);
+
+  // ---- Activities ----
+  const { data: activitiesData, isLoading: activitiesLoading } = useActivitiesForStudent(VERSION_ID);
+  const activities: any[] = Array.isArray(activitiesData) ? activitiesData : [];
+  
+  // Debug: Log activities for troubleshooting
+  useEffect(() => {
+    if (activities.length > 0) {
+      console.log('🎯 Activities loaded:', activities.map((a: any) => ({
+        id: getIdStr(a._id),
+        title: a.title,
+        status: a.status
+      })));
+    }
+  }, [activities]);
+  
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const selectedActivity = activities.find((a: any) => getIdStr(a._id) === selectedActivityId) || null;
+  
+  // Debug: Log selected activity
+  useEffect(() => {
+    console.log('📍 Selected Activity ID:', selectedActivityId);
+    console.log('📋 Found Activity:', selectedActivity?.title || 'NOT FOUND');
+  }, [selectedActivityId, selectedActivity]);
+  // Tracks which activities the student has self-declared as completed (locally)
+  const [acknowledgedActivities, setAcknowledgedActivities] = useState<Record<string, boolean>>({});
+  // State for the self-declaration confirmation dialog
+  const [showDeclarationDialog, setShowDeclarationDialog] = useState(false);
+  const [isDeclarationPending, setIsDeclarationPending] = useState(false);
+  
+  // Mutation for submitting activities
+  const submitActivityMutation = useSubmitActivity();
 
 
   // State to track when we're waiting for next section items to load
@@ -1398,8 +1444,8 @@ export default function CoursePage() {
     );
   }
 
-  if(isMobile && !allProctorsDisabled)
-    return <MobileFallbackScreen/>
+  if (isMobile && !allProctorsDisabled)
+    return <MobileFallbackScreen />
 
   const modules = (courseVersionData as any)?.modules || [];
 
@@ -1432,40 +1478,40 @@ export default function CoursePage() {
       </Dialog>
 
       <SidebarProvider defaultOpen={true}>
-         <ResizablePanelGroup direction="horizontal" className="h-screen w-full">
+        <ResizablePanelGroup direction="horizontal" className="h-screen w-full">
           {/* Enhanced Course Navigation Sidebar */}
           {/* {isDesktopSidebarVisible && ( */}
-            <SidebarResizablePanel
-              // defaultSize={20}
-              // minSize={useSidebar().state=="collapsed"?0:5}
-              // maxSize={useSidebar().state=="collapsed"?0:40}
-              // className="hidden md:block "
-            >
-              <div className="h-full overflow-hidden border-r border-border/40 bg-sidebar/50">
-          {/* <Sidebar variant="inset" className="border-r border-border/40 bg-sidebar/50 backdrop-blur-sm"> */}
-          <Sidebar variant="inset" collapsible="none" className="h-screen w-full">
-            <SidebarHeader className="border-b border-border/40 bg-gradient-to-b from-sidebar/80 to-sidebar/60">
-              {/* Vibe Logo and Brand */}
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg overflow-hidden">
-                  <img
-                    src={logo}
-                    alt="Vibe Logo"
-                    className="h-8 w-8 object-contain"
-                  />
-                </div>
-                <div className="flex flex-col leading-tight">
-                  <span className="text-[1.15rem] font-bold leading-none">
-                    <AuroraText colors={["#A07CFE", "#FE8FB5", "#FFBE7B"]}><b>ViBe</b></AuroraText>
-                  </span>
-                  <p className="text-xs text-muted-foreground">Learning Platform</p>
-                </div>
-              </div>
+          <SidebarResizablePanel
+          // defaultSize={20}
+          // minSize={useSidebar().state=="collapsed"?0:5}
+          // maxSize={useSidebar().state=="collapsed"?0:40}
+          // className="hidden md:block "
+          >
+            <div className="h-full overflow-hidden border-r border-border/40 bg-sidebar/50">
+              {/* <Sidebar variant="inset" className="border-r border-border/40 bg-sidebar/50 backdrop-blur-sm"> */}
+              <Sidebar variant="inset" collapsible="none" className="h-screen w-full">
+                <SidebarHeader className="border-b border-border/40 bg-gradient-to-b from-sidebar/80 to-sidebar/60">
+                  {/* Vibe Logo and Brand */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-lg overflow-hidden">
+                      <img
+                        src={logo}
+                        alt="Vibe Logo"
+                        className="h-8 w-8 object-contain"
+                      />
+                    </div>
+                    <div className="flex flex-col leading-tight">
+                      <span className="text-[1.15rem] font-bold leading-none">
+                        <AuroraText colors={["#A07CFE", "#FE8FB5", "#FFBE7B"]}><b>ViBe</b></AuroraText>
+                      </span>
+                      <p className="text-xs text-muted-foreground">Learning Platform</p>
+                    </div>
+                  </div>
 
-              <Separator className="opacity-50" />
+                  <Separator className="opacity-50" />
 
-              {/* Course Info */}
-              {/* <div className="flex items-center gap-2 px-4 py-3">
+                  {/* Course Info */}
+                  {/* <div className="flex items-center gap-2 px-4 py-3">
                 <div className="p-1.5 rounded-lg bg-gradient-to-br from-primary/15 to-primary/5">
                   <BookOpen className="h-4 w-4 text-primary" />
                 </div>
@@ -1478,543 +1524,792 @@ export default function CoursePage() {
                   </p>
                 </div>
               </div> */}
-            </SidebarHeader>
+                </SidebarHeader>
 
-            <SidebarContent className="bg-card/50 pl-2 shadow-sm border border-border/30">
-              <ScrollArea className="flex-1 transition-colors">
-                <SidebarMenu className="space-y-1 text-sm pr-0">
-                  {modules.map((module: any) => {
-                    const moduleId = module.moduleId;
-                    const progress = moduleProgressMap.get(moduleId);
-                    const isModuleExpanded = expandedModules[moduleId];
-                    const isCurrentModule = moduleId === selectedModuleId;
+                <SidebarContent className="bg-card/50 pl-2 shadow-sm border border-border/30">
+                  <ScrollArea className="flex-1 transition-colors">
+                    <SidebarMenu className="space-y-1 text-sm pr-0">
+                      {modules.map((module: any) => {
+                        const moduleId = module.moduleId;
+                        const progress = moduleProgressMap.get(moduleId);
+                        const isModuleExpanded = expandedModules[moduleId];
+                        const isCurrentModule = moduleId === selectedModuleId;
 
-                    return (
-                      <SidebarMenuItem key={moduleId}>
-                        <SidebarMenuButton
-                          onClick={() => toggleModule(moduleId)}
-                          isActive={isCurrentModule}
-                          className="group relative h-10 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/15 data-[state=active]:to-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-sm"
-                        >
-                          <ChevronRight
-                            className={`h-3.5 w-3.5 transition-transform duration-200 flex-shrink-0 ${isModuleExpanded ? 'rotate-90' : ''
-                              }`}
-                          />
-                          <div className="flex-1 text-left min-w-0 ml-2">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex gap-4 items-center justify-between">
+                        return (
+                          <SidebarMenuItem key={moduleId}>
+                            <SidebarMenuButton
+                              onClick={() => toggleModule(moduleId)}
+                              isActive={isCurrentModule}
+                              className="group relative h-10 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/15 data-[state=active]:to-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-sm"
+                            >
+                              <ChevronRight
+                                className={`h-3.5 w-3.5 transition-transform duration-200 flex-shrink-0 ${isModuleExpanded ? 'rotate-90' : ''
+                                  }`}
+                              />
+                              <div className="flex-1 text-left min-w-0 ml-2">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex gap-4 items-center justify-between">
 
-                                  <div className="font-medium text-xs truncate">
-                                    {module.name.length > 34 ? `${module.name.substring(0, 31)}...` : module.name}
-                                  </div>
-                                  <div className={`text-[10px] ${(progress?.completedItems === progress?.totalItems && progress?.totalItems > 0) ? `dark:text-green-500 text-green-600 ` : ` text-muted-foreground`}`}>
-                                    {moduleProgressLoading
-                                      ? "..."
-                                      : `${progress?.completedItems ?? 0}/${progress?.totalItems ?? 0} completed`
-                                    }
-                                  </div>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="right" align="center">
-                                {module.name}
-                              </TooltipContent>
-                            </Tooltip>
-                            <div className="text-[10px] text-muted-foreground truncate">
-                              {module.sections?.length || 0} sections
-                            </div>
-
-                          </div>
-                        </SidebarMenuButton>
-
-                        {isModuleExpanded && module.sections && (
-                          <SidebarMenuSub className="ml-0 mt-1 space-y-1">
-                            {module.sections.map((section: any) => {
-                              const sectionId = section.sectionId;
-                              const isSectionExpanded = expandedSections[sectionId];
-                              const isCurrentSection = sectionId === selectedSectionId;
-                              const isLoadingItems = activeSectionInfo?.sectionId === sectionId && itemsLoading;
-
-                              return (
-                                <SidebarMenuSubItem key={sectionId}>
-                                  <SidebarMenuSubButton
-                                    onClick={() => toggleSection(moduleId, sectionId)}
-                                    isActive={isCurrentSection}
-                                    className="group relative h-8 px-3 w-full rounded-md text-xs transition-all duration-200 hover:bg-accent/10 hover:text-accent-foreground data-[state=active]:bg-accent/15 data-[state=active]:text-accent-foreground"
-                                  >
-                                    <ChevronRight
-                                      className={`h-3 w-3 flex-shrink-0 transition-transform duration-200 ${isSectionExpanded ? 'rotate-90' : ''
-                                        }`}
-                                    />
-                                    <div className="font-medium truncate flex-1 min-w-0 ml-2 ">
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <div className="font-medium text-xs truncate">
-                                            {section.name.length > 27 ? `${section.name.substring(0, 24)}...` : section.name}
-                                          </div>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="right" align="center">
-                                          {section.name}
-                                        </TooltipContent>
-                                      </Tooltip>
+                                      <div className="font-medium text-xs truncate">
+                                        {module.name.length > 34 ? `${module.name.substring(0, 31)}...` : module.name}
+                                      </div>
+                                      <div className={`text-[10px] ${(progress?.completedItems === progress?.totalItems && progress?.totalItems > 0) ? `dark:text-green-500 text-green-600 ` : ` text-muted-foreground`}`}>
+                                        {moduleProgressLoading
+                                          ? "..."
+                                          : `${progress?.completedItems ?? 0}/${progress?.totalItems ?? 0} completed`
+                                        }
+                                      </div>
                                     </div>
-                                  </SidebarMenuSubButton>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" align="center">
+                                    {module.name}
+                                  </TooltipContent>
+                                </Tooltip>
+                                <div className="text-[10px] text-muted-foreground truncate">
+                                  {module.sections?.length || 0} sections
+                                </div>
 
-                                  {isSectionExpanded && (
-                                    <SidebarMenuSub className="ml-0 mt-1 space-y-0.5">
-                                      {isLoadingItems ? (
-                                        <div className="space-y-1 p-2">
-                                          <Skeleton className="h-4 w-full rounded" />
-                                          <Skeleton className="h-4 w-4/5 rounded" />
+                              </div>
+                            </SidebarMenuButton>
+
+                            {isModuleExpanded && module.sections && (
+                              <SidebarMenuSub className="ml-0 mt-1 space-y-1">
+                                {module.sections.map((section: any) => {
+                                  const sectionId = section.sectionId;
+                                  const isSectionExpanded = expandedSections[sectionId];
+                                  const isCurrentSection = sectionId === selectedSectionId;
+                                  const isLoadingItems = activeSectionInfo?.sectionId === sectionId && itemsLoading;
+
+                                  return (
+                                    <SidebarMenuSubItem key={sectionId}>
+                                      <SidebarMenuSubButton
+                                        onClick={() => toggleSection(moduleId, sectionId)}
+                                        isActive={isCurrentSection}
+                                        className="group relative h-8 px-3 w-full rounded-md text-xs transition-all duration-200 hover:bg-accent/10 hover:text-accent-foreground data-[state=active]:bg-accent/15 data-[state=active]:text-accent-foreground"
+                                      >
+                                        <ChevronRight
+                                          className={`h-3 w-3 flex-shrink-0 transition-transform duration-200 ${isSectionExpanded ? 'rotate-90' : ''
+                                            }`}
+                                        />
+                                        <div className="font-medium truncate flex-1 min-w-0 ml-2 ">
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <div className="font-medium text-xs truncate">
+                                                {section.name.length > 27 ? `${section.name.substring(0, 24)}...` : section.name}
+                                              </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="right" align="center">
+                                              {section.name}
+                                            </TooltipContent>
+                                          </Tooltip>
                                         </div>
-                                      ) : sectionItems[sectionId] ? (
-                                        sortItemsByOrder(sectionItems[sectionId]).map((item: any) => {
-                                          const itemId = item._id;
-                                          const isCurrentItem = itemId === selectedItemId;
-                                          if (item.type === 'QUIZ') return null; // Skip quizzes in sidebar
-                                          return (
-                                            <SidebarMenuSubItem key={itemId}>
-                                              <SidebarMenuSubButton
-                                                onClick={() => handleSelectItem(moduleId, sectionId, itemId)}
-                                                isActive={isCurrentItem}
-                                                className="group relative h-12 px-3 w-full  rounded-md transition-all duration-200 hover:bg-accent/10 data-[state=active]:bg-primary/10 data-[state=active]:text-primary justify-start"
-                                                // Assign ref only to the selected item for autoscroll
-                                                ref={isCurrentItem ? selectedItemRef : undefined}
-                                              >
-                                                <div className="flex items-center gap-2 w-full min-w-0">
-                                                  <div className={`p-0.5 rounded transition-colors flex-shrink-0 ${isCurrentItem
-                                                    ? "bg-primary/90 text-white/80 dark:bg-primary/15 dark:text-primary"
-                                                    : "bg-accent/15 text-accent-foreground group-hover:bg-accent/25"
-                                                    }`}>
-                                                    {getItemIcon(item.type)}
-                                                  </div>
-                                                  <div className="flex-1 text-left min-w-0">
-                                                    <div className="text-xs font-semibold truncate w-full " title={item?.name || 'Loading...'}>
-                                                      {(() => {
-                                                        // Show loading state if this is the selected item and it's loading
-                                                        if (selectedItemId === itemId && itemLoading) {
-                                                          return 'Loading...';
-                                                        }
+                                      </SidebarMenuSubButton>
 
-                                                        // Always show the actual item name, truncated if necessary
-                                                        const itemName = item?.name || item?.title || 'Untitled';
-                                                        return itemName.length > 18 ? `${itemName.substring(0, 15)}...` : itemName;
-                                                      })()}
-                                                    </div>
-                                                    {item.isCompleted && (
-                                                      <div className={`text-[10px] dark:text-green-500 text-green-600 font-medium mt-0.5 flex items-center gap-1 ${selectedItemId === itemId ? "text-green-900" : ""} `}>
-                                                        <CheckCircle className="h-3 w-3" />
-                                                        Completed
+                                      {isSectionExpanded && (
+                                        <SidebarMenuSub className="ml-0 mt-1 space-y-0.5">
+                                          {isLoadingItems ? (
+                                            <div className="space-y-1 p-2">
+                                              <Skeleton className="h-4 w-full rounded" />
+                                              <Skeleton className="h-4 w-4/5 rounded" />
+                                            </div>
+                                          ) : sectionItems[sectionId] ? (
+                                            sortItemsByOrder(sectionItems[sectionId]).map((item: any) => {
+                                              const itemId = item._id;
+                                              const isCurrentItem = itemId === selectedItemId;
+                                              if (item.type === 'QUIZ') return null; // Skip quizzes in sidebar
+                                              return (
+                                                <SidebarMenuSubItem key={itemId}>
+                                                  <SidebarMenuSubButton
+                                                    onClick={() => handleSelectItem(moduleId, sectionId, itemId)}
+                                                    isActive={isCurrentItem}
+                                                    className="group relative h-12 px-3 w-full  rounded-md transition-all duration-200 hover:bg-accent/10 data-[state=active]:bg-primary/10 data-[state=active]:text-primary justify-start"
+                                                    // Assign ref only to the selected item for autoscroll
+                                                    ref={isCurrentItem ? selectedItemRef : undefined}
+                                                  >
+                                                    <div className="flex items-center gap-2 w-full min-w-0">
+                                                      <div className={`p-0.5 rounded transition-colors flex-shrink-0 ${isCurrentItem
+                                                        ? "bg-primary/90 text-white/80 dark:bg-primary/15 dark:text-primary"
+                                                        : "bg-accent/15 text-accent-foreground group-hover:bg-accent/25"
+                                                        }`}>
+                                                        {getItemIcon(item.type)}
                                                       </div>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              </SidebarMenuSubButton>
-                                            </SidebarMenuSubItem>
-                                          );
-                                        })
-                                      ) : (
-                                        <div className="p-3 text-center">
-                                          <div className="text-xs text-muted-foreground">No items found</div>
-                                        </div>
+                                                      <div className="flex-1 text-left min-w-0">
+                                                        <div className="text-xs font-semibold truncate w-full " title={item?.name || 'Loading...'}>
+                                                          {(() => {
+                                                            // Show loading state if this is the selected item and it's loading
+                                                            if (selectedItemId === itemId && itemLoading) {
+                                                              return 'Loading...';
+                                                            }
+
+                                                            // Always show the actual item name, truncated if necessary
+                                                            const itemName = item?.name || item?.title || 'Untitled';
+                                                            return itemName.length > 18 ? `${itemName.substring(0, 15)}...` : itemName;
+                                                          })()}
+                                                        </div>
+                                                        {item.isCompleted && (
+                                                          <div className={`text-[10px] dark:text-green-500 text-green-600 font-medium mt-0.5 flex items-center gap-1 ${selectedItemId === itemId ? "text-green-900" : ""} `}>
+                                                            <CheckCircle className="h-3 w-3" />
+                                                            Completed
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  </SidebarMenuSubButton>
+                                                </SidebarMenuSubItem>
+                                              );
+                                            })
+                                          ) : (
+                                            <div className="p-3 text-center">
+                                              <div className="text-xs text-muted-foreground">No items found</div>
+                                            </div>
+                                          )}
+                                        </SidebarMenuSub>
                                       )}
-                                    </SidebarMenuSub>
+                                    </SidebarMenuSubItem>
+                                  );
+                                })}
+                              </SidebarMenuSub>
+                            )}
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    </SidebarMenu>
+
+                    {/* ── Activities ── */}
+                    {(activitiesLoading || activities.length > 0) && (
+                      <div className="px-2 pt-4 pb-2">
+                        <div className="flex items-center gap-2 mb-2 px-1">
+                          <FileText className="h-3.5 w-3.5 text-orange-500" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Activities
+                          </span>
+                        </div>
+                        {activitiesLoading ? (
+                          <div className="flex justify-center py-3">
+                            <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1">
+                            {activities.map((activity: any) => {
+                              const actId = getIdStr(activity._id);
+                              const isSelected = selectedActivityId === actId;
+                              const isDone = acknowledgedActivities[actId];
+                              const deadlineDate = activity.deadline ? new Date(activity.deadline) : null;
+                              const isOverdue = deadlineDate && deadlineDate < new Date();
+                              return (
+                                <button
+                                  key={actId}
+                                  onClick={() => {
+                                    setSelectedActivityId(actId);
+                                    // Clear any selected course item and hide current item view
+                                    setSelectedItemId(null);
+                                    setCurrentItem(null);
+                                  }}
+                                  className={`w-full text-left rounded-lg px-3 py-2 transition-all duration-150 border ${isSelected
+                                    ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700'
+                                    : 'bg-card hover:bg-accent/40 border-transparent hover:border-border/40'
+                                    }`}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="text-xs font-medium leading-snug truncate flex-1">
+                                      {activity.title}
+                                    </span>
+                                    {isDone ? (
+                                      <CheckCircle className="h-3.5 w-3.5 text-green-500 flex-shrink-0 mt-0.5" />
+                                    ) : (
+                                      <div className={`h-1.5 w-1.5 rounded-full mt-1.5 flex-shrink-0 ${isOverdue ? 'bg-red-500' : 'bg-orange-400'}`} />
+                                    )}
+                                  </div>
+                                  {deadlineDate && (
+                                    <div className={`text-[10px] mt-0.5 ${isOverdue ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                      {isOverdue ? 'Overdue: ' : 'Due: '}
+                                      {deadlineDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    </div>
                                   )}
-                                </SidebarMenuSubItem>
+                                </button>
                               );
                             })}
-                          </SidebarMenuSub>
+                          </div>
                         )}
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              </ScrollArea>
-            </SidebarContent>
-            <SidebarFooter className="border-t border-border/40 bg-gradient-to-t from-sidebar/80 to-sidebar/60 ">
-              {!showProctorDialog ?
-                <FloatingVideo
-                  isVisible={!allProctorsDisabled}
-                  onClose={() => { }}
-                  onAnomalyDetected={() => { }}
-                  setDoGesture={setDoGesture}
-                  settings={proctoringData || {
-                    _id: "",
-                    studentId: "",
-                    versionId: "",
-                    courseId: "",
-                    settings: {
-                      proctors: {
-                        detectors: []
-                      },
-                      linearProgressionEnabled: true
-                    }
-                  }}
-                  anomalies={anomalies}
-                  readyToDetect={readyToDetect}
-                  setReadyToDetect={setReadyToDetect}
-                  setAnomalies={setAnomalies}
-                  rewindVid={rewindVid}
-                  setRewindVid={setRewindVid}
-                  pauseVid={pauseVid}
-                  setPauseVid={setPauseVid}
-                /> :
-                <FloatingVideoPlaceholder />}
-            </SidebarFooter>
-            {/* Navigation Footer */}
-            <SidebarFooter className="border-t border-border/40 bg-gradient-to-t from-sidebar/80 to-sidebar/60">
-              <SidebarMenu className="space-y-1 pl-2 py-3">
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    className="h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
-                  >
-                    <Link to="/student" className="flex items-center gap-3">
-                      <div className="p-1 rounded-md bg-accent/15">
-                        <Home className="h-4 w-4 text-accent-foreground" />
                       </div>
-                      <span className="text-sm font-medium">Dashboard</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    className="h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
-                  >
-                    <Link to="/student/courses" className="flex items-center gap-3">
-                      <div className="p-1 rounded-md bg-accent/15">
-                        <GraduationCap className="h-4 w-4 text-accent-foreground" />
-                      </div>
-                      <span className="text-sm font-medium">Courses</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                {(courseVersionData as any)?.supportLink && (() => {
-                  const link = (courseVersionData as any).supportLink;
-                  const isEmail = link.startsWith('mailto:') || (!link.startsWith('http://') && !link.startsWith('https://') && !link.startsWith('//') && link.includes('@'));
-                  const href = link.startsWith('mailto:')
-                    ? link
-                    : link.startsWith('http://') || link.startsWith('https://') || link.startsWith('//')
-                      ? link
-                      : link.includes('@')
-                        ? `mailto:${link}`
-                        : link;
-                  return (
+                    )}
+                  </ScrollArea>
+                </SidebarContent>
+                <SidebarFooter className="border-t border-border/40 bg-gradient-to-t from-sidebar/80 to-sidebar/60 ">
+                  {!showProctorDialog ?
+                    <FloatingVideo
+                      isVisible={!allProctorsDisabled}
+                      onClose={() => { }}
+                      onAnomalyDetected={() => { }}
+                      setDoGesture={setDoGesture}
+                      settings={proctoringData || {
+                        _id: "",
+                        studentId: "",
+                        versionId: "",
+                        courseId: "",
+                        settings: {
+                          proctors: {
+                            detectors: []
+                          },
+                          linearProgressionEnabled: true
+                        }
+                      }}
+                      anomalies={anomalies}
+                      readyToDetect={readyToDetect}
+                      setReadyToDetect={setReadyToDetect}
+                      setAnomalies={setAnomalies}
+                      rewindVid={rewindVid}
+                      setRewindVid={setRewindVid}
+                      pauseVid={pauseVid}
+                      setPauseVid={setPauseVid}
+                    /> :
+                    <FloatingVideoPlaceholder />}
+                </SidebarFooter>
+                {/* Navigation Footer */}
+                <SidebarFooter className="border-t border-border/40 bg-gradient-to-t from-sidebar/80 to-sidebar/60">
+                  <SidebarMenu className="space-y-1 pl-2 py-3">
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         asChild
                         className="h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
                       >
-                        <a
-                          href={href}
-                          target={isEmail ? undefined : "_blank"}
-                          rel={isEmail ? undefined : "noopener noreferrer"}
-                          className="flex items-center gap-3"
-                        >
+                        <Link to="/student" className="flex items-center gap-3">
                           <div className="p-1 rounded-md bg-accent/15">
-                            <Headphones className="h-4 w-4 text-accent-foreground" />
+                            <Home className="h-4 w-4 text-accent-foreground" />
                           </div>
-                          <span className="text-sm font-medium">Get Support</span>
-                          <ExternalLink className="h-3 w-3 text-muted-foreground ml-auto" />
-                        </a>
+                          <span className="text-sm font-medium">Dashboard</span>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
-                  );
-                })()}
 
-                <Separator className="my-2 opacity-50" />
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        className="h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
+                      >
+                        <Link to="/student/courses" className="flex items-center gap-3">
+                          <div className="p-1 rounded-md bg-accent/15">
+                            <GraduationCap className="h-4 w-4 text-accent-foreground" />
+                          </div>
+                          <span className="text-sm font-medium">Courses</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
 
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    className="h-10 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
-                  >
-                    <Link to="/student/profile" className="flex items-center gap-3">
-                      <Avatar className="h-6 w-6 border border-border/20">
-                        <AvatarImage src={user?.avatar} alt={user?.name} />
-                        <AvatarFallback className="bg-gradient-to-br from-primary/15 to-primary/5 text-primary font-bold text-xs">
-                          {user?.name?.charAt(0).toUpperCase() || 'U'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 text-left min-w-0">
-                        <div className="text-sm font-medium truncate" title={user?.name || 'Profile'}>{user?.name || 'Profile'}</div>
-                        <div className="text-xs text-muted-foreground">View Profile</div>
-                      </div>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarFooter>
-          </Sidebar>
-          </div>
+                    {(courseVersionData as any)?.supportLink && (() => {
+                      const link = (courseVersionData as any).supportLink;
+                      const isEmail = link.startsWith('mailto:') || (!link.startsWith('http://') && !link.startsWith('https://') && !link.startsWith('//') && link.includes('@'));
+                      const href = link.startsWith('mailto:')
+                        ? link
+                        : link.startsWith('http://') || link.startsWith('https://') || link.startsWith('//')
+                          ? link
+                          : link.includes('@')
+                            ? `mailto:${link}`
+                            : link;
+                      return (
+                        <SidebarMenuItem>
+                          <SidebarMenuButton
+                            asChild
+                            className="h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
+                          >
+                            <a
+                              href={href}
+                              target={isEmail ? undefined : "_blank"}
+                              rel={isEmail ? undefined : "noopener noreferrer"}
+                              className="flex items-center gap-3"
+                            >
+                              <div className="p-1 rounded-md bg-accent/15">
+                                <Headphones className="h-4 w-4 text-accent-foreground" />
+                              </div>
+                              <span className="text-sm font-medium">Get Support</span>
+                              <ExternalLink className="h-3 w-3 text-muted-foreground ml-auto" />
+                            </a>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })()}
+
+                    <Separator className="my-2 opacity-50" />
+
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        className="h-10 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
+                      >
+                        <Link to="/student/profile" className="flex items-center gap-3">
+                          <Avatar className="h-6 w-6 border border-border/20">
+                            <AvatarImage src={user?.avatar} alt={user?.name} />
+                            <AvatarFallback className="bg-gradient-to-br from-primary/15 to-primary/5 text-primary font-bold text-xs">
+                              {user?.name?.charAt(0).toUpperCase() || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 text-left min-w-0">
+                            <div className="text-sm font-medium truncate" title={user?.name || 'Profile'}>{user?.name || 'Profile'}</div>
+                            <div className="text-xs text-muted-foreground">View Profile</div>
+                          </div>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarFooter>
+              </Sidebar>
+            </div>
           </SidebarResizablePanel>
-        {/* // )} */}
-{/* {isDesktopSidebarVisible &&  */}
-<ResizableHandle className="hidden md:flex h-screen" />
-{/* } */}
- <ResizablePanel defaultSize={80} className="min-w-0 min-h-screen">
-          {/* Main Content Area */}
-          <SidebarInset className="flex-1  bg-gradient-to-br from-background via-background to-background/95 peer-data-[variant=inset]:!m-0">
-            <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border/20 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 px-4">
-              {/* <Button
+          {/* // )} */}
+          {/* {isDesktopSidebarVisible &&  */}
+          <ResizableHandle className="hidden md:flex h-screen" />
+          {/* } */}
+          <ResizablePanel defaultSize={80} className="min-w-0 min-h-screen">
+            {/* Main Content Area */}
+            <SidebarInset className="flex-1  bg-gradient-to-br from-background via-background to-background/95 peer-data-[variant=inset]:!m-0">
+              <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border/20 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 px-4">
+                {/* <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setIsDesktopSidebarVisible((p) => !p)}
                   className="hidden md:inline-flex"
                 > */}
-                  {/* <Menu className="h-5 w-5" /> */}
-                  <SidebarTrigger />
+                {/* <Menu className="h-5 w-5" /> */}
+                <SidebarTrigger />
                 {/* </Button> */}
-              <Separator orientation="vertical" className="mr-2 h-4" />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleGoBack}
-                className="relative h-10 w-10 p-0 mr-4 text-sm font-medium transition-all duration-300 hover:bg-gradient-to-r hover:from-accent/30 hover:to-accent/10 hover:text-accent-foreground hover:shadow-lg hover:shadow-accent/10 before:absolute before:inset-0 before:rounded-md before:bg-gradient-to-r before:from-primary/5 before:to-transparent before:opacity-0 hover:before:opacity-100 before:transition-opacity before:duration-300"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <div className="text-xl font-medium text-foreground truncate" title={currentItem ? currentItem.name : 'Select content to begin learning'}>
-                  <b>{currentItem ? currentItem.name : 'Select content to begin learning'}</b>
+                <Separator orientation="vertical" className="mr-2 h-4" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleGoBack}
+                  className="relative h-10 w-10 p-0 mr-4 text-sm font-medium transition-all duration-300 hover:bg-gradient-to-r hover:from-accent/30 hover:to-accent/10 hover:text-accent-foreground hover:shadow-lg hover:shadow-accent/10 before:absolute before:inset-0 before:rounded-md before:bg-gradient-to-r before:from-primary/5 before:to-transparent before:opacity-0 hover:before:opacity-100 before:transition-opacity before:duration-300"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div className="text-xl font-medium text-foreground truncate" title={currentItem ? currentItem.name : selectedActivity ? selectedActivity.title : 'Select content to begin learning'}>
+                    <b>{currentItem ? currentItem.name : selectedActivity ? selectedActivity.title : 'Select content to begin learning'}</b>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 ml-auto">
-                <ThemeToggle />
-              </div>
-            </header>
+                <div className="flex items-center gap-2 ml-auto">
+                  <ThemeToggle />
+                </div>
+              </header>
 
-            <div className="flex-1 overflow-hidden relative">
-              {/* Ambient background effect */}
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.01] via-transparent to-secondary/[0.01] pointer-events-none" />
+              <div className="flex-1 overflow-hidden relative">
+                {/* Ambient background effect */}
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.01] via-transparent to-secondary/[0.01] pointer-events-none" />
 
-              {/* Notification Stack */}
-              <div className="fixed top-6 right-6 z-50 flex flex-col gap-2 w-90 ">
-                {/* ✅ Item Access Error Notification */}
-                {isItemForbidden && (
-                  <Card className="border border-red-400/40 bg-red-600/95 text-red-50 shadow-lg backdrop-blur-md animate-in slide-in-from-right-3 duration-300">
-                    <CardContent className="flex items-center gap-3 px-4 py-0">
-                      <div className="flex h-22 w-22 items-center justify-center rounded-l border-red-50/30 bg-red-50/10 text-4xl p-4">
-                        <AlertCircle className="h-16 w-16" />
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <Badge variant="outline" className="border-red-50/30 bg-red-50/10 text-red-50 text-lg font-bold">
-                          Access Restricted
-                        </Badge>
-                        <p className="text-md font-medium leading-relaxed">
-                          {previousValidItem
-                            ? "Returning to previous valid content."
-                            : "Complete current item first to access this content."
-                          }
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setIsItemForbidden(false)}
-                        className="h-6 w-6 p-0 text-red-50 hover:bg-red-50/10"
-                      >
-                        ×
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Gesture Notification */}
-                {doGesture && currentItem?.type !== 'VIDEO' && (
-                  <Card className="border border-amber-400/20 bg-amber-600/90 text-amber-50 shadow-lg backdrop-blur-md animate-in slide-in-from-right-3 duration-300">
-                    <CardContent className="flex items-center gap-3 px-4 py-0">
-                      <div className="flex h-22 w-22 items-center justify-center rounded-lg bg-white text-4xl p-4">
-                        <img src="https://em-content.zobj.net/source/microsoft/309/thumbs-up_1f44d.png" className="w-auto h-full" />
-                      </div>
-                      <div className="flex-1 space-y-1 py-3">
-                        <Badge variant="outline" className="border-amber-50/30 bg-amber-50/10 text-amber-50 text-xl font-bold">
-                          Gesture Required
-                        </Badge>
-                        <p className="text-lg font-medium leading-relaxed m-1">
-                          Show a <strong>thumbs up</strong>!
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Quiz Passed/Failed */}
-
-                {quizPassed !== 2 && !isQuizSkipped && (
-                  <div className="fixed top-6 right-6 z-50 animate-in slide-in-from-top-5 fade-in duration-200">
-                    <div
-                      className={`relative w-[380px] rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-300 
-        ${quizPassed === 1
-                          ? 'bg-gradient-to-br from-emerald-500 to-green-600'
-                          : 'bg-gradient-to-br from-rose-500 to-red-600'
-                        }`}
-                    >
-                      {/* Close Button */}
-                      <button
-                        onClick={() => {
-                          setClosing(true)
-                          // setQuizPassed(2)
-                          setTimeout(() => setQuizPassed(2), 300)
-                        }}
-                        className="absolute top-3 right-3 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors duration-200 group"
-                        aria-label="Close"
-                      >
-                        <X className="h-5 w-5 text-white group-hover:rotate-90 transition-transform duration-200" />
-                      </button>
-
-                      <div className="p-6 space-y-4">
-                        {/* Icon + Title */}
-                        <div className="flex items-center gap-4">
-                          <div className="relative">
-                            <div
-                              className={`absolute inset-0 rounded-full blur-xl opacity-50 
-              ${quizPassed === 1 ? 'bg-emerald-200' : 'bg-rose-200'}`}
-                            />
-                            <div className="relative bg-white/20 backdrop-blur-sm rounded-full p-4 border border-white/40">
-                              {quizPassed === 1 ? (
-                                <CheckCircle className="h-12 w-12 text-white" strokeWidth={2.5} />
-                              ) : (
-                                <XCircle className="h-12 w-12 text-white" strokeWidth={2.5} />
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex-1 space-y-1">
-                            <h2 className="text-xl font-bold text-white">
-                              {quizPassed === 1 ? 'Quiz Passed!' : 'Quiz Failed'}
-                            </h2>
-                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/30">
-                              <div
-                                className={`h-2 w-2 rounded-full animate-pulse 
-                ${quizPassed === 1 ? 'bg-emerald-200' : 'bg-rose-200'}`}
-                              />
-                              <span className="text-xs font-medium text-white/90">
-                                {quizPassed === 1 ? 'Great job!' : 'Keep learning'}
-                              </span>
-                            </div>
-                          </div>
+                {/* Notification Stack */}
+                <div className="fixed top-6 right-6 z-50 flex flex-col gap-2 w-90 ">
+                  {/* ✅ Item Access Error Notification */}
+                  {isItemForbidden && (
+                    <Card className="border border-red-400/40 bg-red-600/95 text-red-50 shadow-lg backdrop-blur-md animate-in slide-in-from-right-3 duration-300">
+                      <CardContent className="flex items-center gap-3 px-4 py-0">
+                        <div className="flex h-22 w-22 items-center justify-center rounded-l border-red-50/30 bg-red-50/10 text-4xl p-4">
+                          <AlertCircle className="h-16 w-16" />
                         </div>
-
-                        {/* Redirect Indicator */}
-                        <div className="flex items-center gap-2 pt-1">
-                          <div className="flex gap-1">
-                            <div className="h-2 w-2 rounded-full bg-white/60 animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <div className="h-2 w-2 rounded-full bg-white/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <div className="h-2 w-2 rounded-full bg-white/60 animate-bounce" style={{ animationDelay: '300ms' }} />
-                          </div>
-                          <p className="text-white/90 text-xs font-medium">
-                            {quizPassed === 1 ? 'Moving to the next video' : 'Redirecting to the previous video'}
+                        <div className="flex-1 space-y-1">
+                          <Badge variant="outline" className="border-red-50/30 bg-red-50/10 text-red-50 text-lg font-bold">
+                            Access Restricted
+                          </Badge>
+                          <p className="text-md font-medium leading-relaxed">
+                            {previousValidItem
+                              ? "Returning to previous valid content."
+                              : "Complete current item first to access this content."
+                            }
                           </p>
                         </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsItemForbidden(false)}
+                          className="h-6 w-6 p-0 text-red-50 hover:bg-red-50/10"
+                        >
+                          ×
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Gesture Notification */}
+                  {doGesture && currentItem?.type !== 'VIDEO' && (
+                    <Card className="border border-amber-400/20 bg-amber-600/90 text-amber-50 shadow-lg backdrop-blur-md animate-in slide-in-from-right-3 duration-300">
+                      <CardContent className="flex items-center gap-3 px-4 py-0">
+                        <div className="flex h-22 w-22 items-center justify-center rounded-lg bg-white text-4xl p-4">
+                          <img src="https://em-content.zobj.net/source/microsoft/309/thumbs-up_1f44d.png" className="w-auto h-full" />
+                        </div>
+                        <div className="flex-1 space-y-1 py-3">
+                          <Badge variant="outline" className="border-amber-50/30 bg-amber-50/10 text-amber-50 text-xl font-bold">
+                            Gesture Required
+                          </Badge>
+                          <p className="text-lg font-medium leading-relaxed m-1">
+                            Show a <strong>thumbs up</strong>!
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Quiz Passed/Failed */}
+
+                  {quizPassed !== 2 && !isQuizSkipped && (
+                    <div className="fixed top-6 right-6 z-50 animate-in slide-in-from-top-5 fade-in duration-200">
+                      <div
+                        className={`relative w-[380px] rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-300 
+        ${quizPassed === 1
+                            ? 'bg-gradient-to-br from-emerald-500 to-green-600'
+                            : 'bg-gradient-to-br from-rose-500 to-red-600'
+                          }`}
+                      >
+                        {/* Close Button */}
+                        <button
+                          onClick={() => {
+                            setClosing(true)
+                            // setQuizPassed(2)
+                            setTimeout(() => setQuizPassed(2), 300)
+                          }}
+                          className="absolute top-3 right-3 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors duration-200 group"
+                          aria-label="Close"
+                        >
+                          <X className="h-5 w-5 text-white group-hover:rotate-90 transition-transform duration-200" />
+                        </button>
+
+                        <div className="p-6 space-y-4">
+                          {/* Icon + Title */}
+                          <div className="flex items-center gap-4">
+                            <div className="relative">
+                              <div
+                                className={`absolute inset-0 rounded-full blur-xl opacity-50 
+              ${quizPassed === 1 ? 'bg-emerald-200' : 'bg-rose-200'}`}
+                              />
+                              <div className="relative bg-white/20 backdrop-blur-sm rounded-full p-4 border border-white/40">
+                                {quizPassed === 1 ? (
+                                  <CheckCircle className="h-12 w-12 text-white" strokeWidth={2.5} />
+                                ) : (
+                                  <XCircle className="h-12 w-12 text-white" strokeWidth={2.5} />
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex-1 space-y-1">
+                              <h2 className="text-xl font-bold text-white">
+                                {quizPassed === 1 ? 'Quiz Passed!' : 'Quiz Failed'}
+                              </h2>
+                              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/30">
+                                <div
+                                  className={`h-2 w-2 rounded-full animate-pulse 
+                ${quizPassed === 1 ? 'bg-emerald-200' : 'bg-rose-200'}`}
+                                />
+                                <span className="text-xs font-medium text-white/90">
+                                  {quizPassed === 1 ? 'Great job!' : 'Keep learning'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Redirect Indicator */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <div className="flex gap-1">
+                              <div className="h-2 w-2 rounded-full bg-white/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+                              <div className="h-2 w-2 rounded-full bg-white/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+                              <div className="h-2 w-2 rounded-full bg-white/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+                            </div>
+                            <p className="text-white/90 text-xs font-medium">
+                              {quizPassed === 1 ? 'Moving to the next video' : 'Redirecting to the previous video'}
+                            </p>
+                          </div>
+                        </div>
                       </div>
+                    </div>
+                  )}
+
+
+                </div>
+                <FlagModal
+                  open={isFlagModalOpen}
+                  onOpenChange={setIsFlagModalOpen}
+                  onSubmit={handleFlagSubmit}
+                  isSubmitting={isPending}
+                />
+                {currentItem ? (
+                  <div className="relative z-10 h-full flex flex-col mb-2  sm:mb-1">
+                    <div className="flex justify-end mb-1 me-10 gap-2 ">
+                      {!isFlagSubmitted &&
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="text-xs gap-1"
+                          title="Flag this content"
+                          onClick={() => setIsFlagModalOpen(true)}
+                        >
+                          <FlagTriangleRightIcon className="h-4 w-4" />
+                          <span className="max-sm:hidden">Submit Flag</span>
+                        </Button>
+                      }
+                      {currentItem?.isOptional && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs gap-1 border-amber-500 text-amber-500 hover:bg-amber-50 hover:text-amber-600"
+                          title="Skip this optional item"
+                          onClick={handleSkipItem}
+                          disabled={isSkippingItem || isSkipping}
+                        >
+                          <span className="max-sm:hidden">Skip</span>
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    {currentItem?.type === 'PROJECT' ? (
+                      <StudentProjectItem
+                        item={currentItem}
+                        onNext={handleNext}
+                        isProgressUpdating={isNavigatingToNext}
+                      />
+                    ) : (
+
+                      <ItemContainer
+                        ref={itemContainerRef}
+                        item={currentItem}
+                        doGesture={doGesture}
+                        onNext={handleNext}
+                        onPrevVideo={handlePrevVideo}
+                        isProgressUpdating={isNavigatingToNext}
+                        attemptId={attemptId || undefined}
+                        setAttemptId={setAttemptId}
+                        rewindVid={rewindVid}
+                        readyToDetect={readyToDetect}
+                        pauseVid={pauseVid}
+                        displayNextLesson={false}
+                        setQuizPassed={setQuizPassed}
+                        anomalies={anomalies}
+                        keyboardLockEnabled={!isFlagModalOpen}
+                        linearProgressionEnabled={proctoringData?.settings.linearProgressionEnabled || true}
+                        seekForwardEnabled={proctoringData?.settings.seekForwardEnabled || false}
+                        setIsQuizSkipped={setIsQuizSkipped}
+                        courseId={COURSE_ID}
+                        versionId={VERSION_ID}
+                        sectionId={sectionId}
+                      />
+                    )}
+
+                  </div>
+                ) : selectedActivity ? (
+                  /* ─────── Activity Detail Panel ─────── */
+                  <div className="relative z-10 h-full flex flex-col overflow-auto p-4 sm:p-6 lg:p-8">
+                    {/* Declaration warning dialog */}
+                    <Dialog open={showDeclarationDialog} onOpenChange={setShowDeclarationDialog}>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                            <AlertCircle className="h-5 w-5" />
+                            Declaration Warning
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-4">
+                            <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed font-medium">
+                              ⚠️ You are accepting that you have completed this activity.
+                            </p>
+                            <p className="text-sm text-amber-700 dark:text-amber-300 leading-relaxed mt-2">
+                              If we find you guilty of a false declaration, disciplinary actions will be taken.
+                            </p>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Please confirm that you have genuinely completed <strong>"{selectedActivity.title}"</strong>.
+                          </p>
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setShowDeclarationDialog(false)}
+                            disabled={isDeclarationPending}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            disabled={isDeclarationPending}
+                            onClick={async () => {
+                              setIsDeclarationPending(true);
+                              try {
+                                // Debug: log token being used for submit
+                                try {
+                                  const _tok = localStorage.getItem('firebase-auth-token');
+                                  // eslint-disable-next-line no-console
+                                  console.log('🔐 submit token:', _tok);
+                                } catch (e) {}
+
+                                // Submit activity and award HP
+                                const result = await submitActivityMutation.mutateAsync(getIdStr(selectedActivity._id));
+                                
+                                // Mark locally as acknowledged
+                                setAcknowledgedActivities(prev => ({ ...prev, [getIdStr(selectedActivity._id)]: true }));
+                                
+                                setShowDeclarationDialog(false);
+                                
+                                // Show success with HP awarded
+                                toast.success(
+                                  `🎉 Activity completed! You earned ${result.hpAwarded || 0} HP!`,
+                                  { position: 'top-right', duration: 4000 }
+                                );
+                              } catch (error: any) {
+                                toast.error(
+                                  error.message || 'Failed to submit activity',
+                                  { position: 'top-right' }
+                                );
+                              } finally {
+                                setIsDeclarationPending(false);
+                              }
+                            }}
+                          >
+                            {isDeclarationPending ? (
+                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                            ) : (
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                            )}
+                            Yes, I have completed it
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+
+                    {/* Activity card */}
+                    <div className="max-w-2xl mx-auto w-full space-y-6">
+                      {/* Header */}
+                      <div className="flex items-start gap-4">
+                        <div className="p-3 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex-shrink-0">
+                          <FileText className="h-6 w-6" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h1 className="text-2xl font-bold text-foreground leading-tight">
+                            {selectedActivity.title}
+                          </h1>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <Badge variant="outline" className="text-xs">
+                              {selectedActivity.activityType?.replace(/_/g, ' ') || 'Activity'}
+                            </Badge>
+                            {selectedActivity.isMandatory && (
+                              <Badge className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800">
+                                Required
+                              </Badge>
+                            )}
+                            {acknowledgedActivities[getIdStr(selectedActivity._id)] && (
+                              <Badge className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Completed
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <Separator />
+
+                      {/* Deadline */}
+                      {selectedActivity.deadline && (() => {
+                        const dl = new Date(selectedActivity.deadline);
+                        const overdue = dl < new Date();
+                        return (
+                          <div className={`flex items-center gap-3 p-4 rounded-lg border ${overdue ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' : 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800'}`}>
+                            <AlertCircle className={`h-5 w-5 flex-shrink-0 ${overdue ? 'text-red-500' : 'text-blue-500'}`} />
+                            <div>
+                              <p className={`text-sm font-semibold ${overdue ? 'text-red-700 dark:text-red-400' : 'text-blue-700 dark:text-blue-400'}`}>
+                                {overdue ? 'Submission Overdue' : 'Deadline'}
+                              </p>
+                              <p className={`text-sm ${overdue ? 'text-red-600 dark:text-red-300' : 'text-blue-600 dark:text-blue-300'}`}>
+                                {dl.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                {' at '}
+                                {dl.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Description */}
+                      {selectedActivity.description && (
+                        <div className="space-y-2">
+                          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Description</h2>
+                          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                            {selectedActivity.description}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Reward info */}
+                      {selectedActivity.rewardValue != null && (
+                        <div className="flex items-center gap-3 p-4 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800">
+                          <Target className="h-5 w-5 text-purple-500 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-purple-700 dark:text-purple-400">Reward</p>
+                            <p className="text-sm text-purple-600 dark:text-purple-300">
+                              {selectedActivity.rewardValue}
+                              {selectedActivity.rewardType === 'PERCENTAGE' ? '%' : ' HP'} on successful completion
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      <Separator />
+
+                      {/* Self-declaration section */}
+                      <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+                        <h2 className="text-base font-semibold text-foreground">
+                          Have you completed this activity?
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                          Please confirm only if you have genuinely completed the above activity. False declarations may lead to disciplinary action.
+                        </p>
+                        {acknowledgedActivities[getIdStr(selectedActivity._id)] ? (
+                          <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-medium">
+                            <CheckCircle className="h-5 w-5" />
+                            <span>You have declared this activity as completed.</span>
+                          </div>
+                        ) : (
+                          <div className="flex gap-3">
+                            <Button
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              onClick={() => setShowDeclarationDialog(true)}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Yes, I've completed it
+                            </Button>
+                            <Button variant="outline" disabled>
+                              No, not yet
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-full flex items-center justify-center relative z-10">
+                    <div className="text-center max-w-md">
+                      <div className="relative mb-6">
+                        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 rounded-full blur-xl opacity-60" />
+                        <div className="relative p-6 rounded-full bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20">
+                          <BookOpen className="h-12 w-12 text-primary mx-auto" />
+                        </div>
+                      </div>
+                      <h3 className="text-xl font-bold mb-3 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                        Ready to Learn?
+                      </h3>
+                      <p className="text-muted-foreground mb-6 leading-relaxed">
+                        Select an item from the course navigation to begin your learning journey and unlock new knowledge.
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/10 hover:to-accent/5 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/10"
+                      >
+                        <Target className="h-4 w-4 mr-2" />
+                        Browse Content
+                      </Button>
                     </div>
                   </div>
                 )}
 
-
               </div>
-              <FlagModal
-                open={isFlagModalOpen}
-                onOpenChange={setIsFlagModalOpen}
-                onSubmit={handleFlagSubmit}
-                isSubmitting={isPending}
-              />
-              {currentItem ? (
-                <div className="relative z-10 h-full flex flex-col mb-2  sm:mb-1">
-                  <div className="flex justify-end mb-1 me-10 gap-2 ">
-                    {!isFlagSubmitted &&
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="text-xs gap-1"
-                        title="Flag this content"
-                        onClick={() => setIsFlagModalOpen(true)}
-                      >
-                        <FlagTriangleRightIcon className="h-4 w-4" />
-                        <span className="max-sm:hidden">Submit Flag</span>
-                      </Button>
-                    }
-                    {currentItem?.isOptional && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs gap-1 border-amber-500 text-amber-500 hover:bg-amber-50 hover:text-amber-600"
-                        title="Skip this optional item"
-                        onClick={handleSkipItem}
-                        disabled={isSkippingItem || isSkipping}
-                      >
-                        <span className="max-sm:hidden">Skip</span>
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                  {currentItem?.type === 'PROJECT' ? (
-                    <StudentProjectItem
-                      item={currentItem}
-                      onNext={handleNext}
-                      isProgressUpdating={isNavigatingToNext}
-                    />
-                  ) : (
-                    
-                    <ItemContainer
-                      ref={itemContainerRef}
-                      item={currentItem}
-                      doGesture={doGesture}
-                      onNext={handleNext}
-                      onPrevVideo={handlePrevVideo}
-                      isProgressUpdating={isNavigatingToNext}
-                      attemptId={attemptId || undefined}
-                      setAttemptId={setAttemptId}
-                      rewindVid={rewindVid}
-                      readyToDetect={readyToDetect}
-                      pauseVid={pauseVid}
-                      displayNextLesson={false}
-                      setQuizPassed={setQuizPassed}
-                      anomalies={anomalies}
-                      keyboardLockEnabled={!isFlagModalOpen}
-                      linearProgressionEnabled={proctoringData?.settings.linearProgressionEnabled || true}
-                      seekForwardEnabled={proctoringData?.settings.seekForwardEnabled || false}
-                      setIsQuizSkipped={setIsQuizSkipped}
-                      courseId={COURSE_ID}
-                      versionId={VERSION_ID}
-                      sectionId={sectionId}
-                    />
-                  )}
-
-                </div>
-              ) : (
-                <div className="h-full flex items-center justify-center relative z-10">
-                  <div className="text-center max-w-md">
-                    <div className="relative mb-6">
-                      <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 rounded-full blur-xl opacity-60" />
-                      <div className="relative p-6 rounded-full bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20">
-                        <BookOpen className="h-12 w-12 text-primary mx-auto" />
-                      </div>
-                    </div>
-                    <h3 className="text-xl font-bold mb-3 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                      Ready to Learn?
-                    </h3>
-                    <p className="text-muted-foreground mb-6 leading-relaxed">
-                      Select an item from the course navigation to begin your learning journey and unlock new knowledge.
-                    </p>
-                    <Button
-                      variant="outline"
-                      className="transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/10 hover:to-accent/5 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/10"
-                    >
-                      <Target className="h-4 w-4 mr-2" />
-                      Browse Content
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </SidebarInset>
+            </SidebarInset>
           </ResizablePanel>
-       </ResizablePanelGroup>
+        </ResizablePanelGroup>
       </SidebarProvider>
     </>
   );

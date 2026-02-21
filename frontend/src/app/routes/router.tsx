@@ -5,7 +5,6 @@ import {
   redirect,
   createMemoryHistory,
   Outlet,
-  NotFoundRoute,
   useNavigate
 } from '@tanstack/react-router'
 import { useAuthStore } from '@/store/auth-store'
@@ -441,11 +440,7 @@ const coursePageRoute = new Route({
   },
 });
 
-// Create a catch-all not found route
-const notFoundRoute = new NotFoundRoute({
-  getParentRoute: () => rootRoute,
-  component: NotFoundComponent,
-});
+// Removed deprecated notFoundRoute as we now use defaultNotFoundComponent on the Router
 
 // Remove TestAISectionModalPage and use AISectionPage for the test route
 const testAISectionModalRoute = new Route({
@@ -531,7 +526,6 @@ export const router = new Router({
   history: memoryHistory,
   // Global not found component
   defaultNotFoundComponent: NotFoundComponent,
-  notFoundRoute,
 });
 
 // Add a navigation guard for redirecting based on roles

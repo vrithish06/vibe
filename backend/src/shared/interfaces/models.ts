@@ -762,3 +762,34 @@ export interface TranscriptExplanations {
   C: string;
   D: string;
 }
+
+// Activity Creation System
+export type ActivityType = 'ASSIGNMENT_PROOF' | 'VIBE_MILESTONE' | 'EXTERNAL_IMPORT';
+export type RewardType = 'ABSOLUTE' | 'PERCENTAGE';
+export type PenaltyType = 'ABSOLUTE' | 'PERCENTAGE';
+export type SubmissionMode = 'IN_PLATFORM' | 'EXTERNAL_LINK' | 'CSV_IMPORT';
+export type ActivityStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
+
+export interface IActivity {
+  _id?: string | ObjectId | null;
+  courseId: string | ObjectId;
+  courseVersionId: string | ObjectId;
+  cohortId?: string | ObjectId;
+  title: string;
+  description: string;
+  activityType: ActivityType;
+  deadline: Date;
+  rewardType: RewardType;
+  rewardValue: number;
+  mandatory: boolean;
+  penaltyType?: PenaltyType;
+  penaltyValue?: number;
+  submissionMode: SubmissionMode;
+  status: ActivityStatus;
+  gracePeriodDuration?: number;
+  graceRewardPercentage?: number;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string | ObjectId;
+  isDeleted?: boolean;
+}
