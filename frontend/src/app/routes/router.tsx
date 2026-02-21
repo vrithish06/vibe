@@ -44,9 +44,12 @@ import FeedbackFormEditor from '../pages/teacher/FeedbackFormEditor'
 import { HealthPointsOverview } from '../pages/teacher/HealthPointsOverview'
 import { HealthPointsDetail } from '../pages/teacher/HealthPointsDetail'
 import Leaderboard from '../pages/student/leaderboard'
+import ForgotPasswordPage from '../pages/ForgotPasswordPage'
+import ResetPasswordPage from '../pages/ResetPasswordPage'
 import StudentLogin from '../pages/student/StudentLogin'
 import TeacherLogin from '../pages/teacher/TeacherLogin'
 import SelectRolePage from '../pages/SelectRolePage'
+import AuditPage from '../pages/teacher/AuditPage'
 
 
 // Root route with error and notFound handling
@@ -81,6 +84,42 @@ const authRoute = new Route({
   getParentRoute: () => rootRoute,
   path: '/auth',
   component: AuthPage,
+  beforeLoad: () => {
+    const { isAuthenticated, user } = useAuthStore.getState();
+    // Redirect to appropriate dashboard if already authenticated
+    if (isAuthenticated && user?.role) {
+      if (user.role === 'teacher') {
+        throw redirect({ to: '/teacher' });
+      } else if (user.role === 'student') {
+        throw redirect({ to: '/student' });
+      }
+    }
+  },
+});
+
+// Forgot Password route - accessible only when NOT authenticated
+const forgotPasswordRoute = new Route({
+  getParentRoute: () => rootRoute,
+  path: '/forgot-password',
+  component: ForgotPasswordPage,
+  beforeLoad: () => {
+    const { isAuthenticated, user } = useAuthStore.getState();
+    // Redirect to appropriate dashboard if already authenticated
+    if (isAuthenticated && user?.role) {
+      if (user.role === 'teacher') {
+        throw redirect({ to: '/teacher' });
+      } else if (user.role === 'student') {
+        throw redirect({ to: '/student' });
+      }
+    }
+  },
+});
+
+// Reset Password route - accessible only when NOT authenticated
+const resetPasswordRoute = new Route({
+  getParentRoute: () => rootRoute,
+  path: '/reset-password',
+  component: ResetPasswordPage,
   beforeLoad: () => {
     const { isAuthenticated, user } = useAuthStore.getState();
     // Redirect to appropriate dashboard if already authenticated
@@ -333,6 +372,12 @@ const teacherAIWorkflowSectionRoute = new Route({
   component: AiWorkflow,
 });
 
+const teacherAuditRoute = new Route({
+  getParentRoute: () => teacherLayoutRoute,
+  path: '/audit',
+  component: AuditPage,
+})
+
 // Teacher Health Points Overview
 const teacherHealthPointsRoute = new Route({
   getParentRoute: () => teacherLayoutRoute,
@@ -401,7 +446,7 @@ export const studentCourseInviteRegistration = new Route({
       throw redirect({
         to: '/student/login',
         search: {
-          redirect: window.location.pathname, // optional: come back after login
+          redirect: window.location.pathname + window.location.search,
         },
       });
     }
@@ -484,6 +529,9 @@ export const selectRoleRoute = new Route({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   authRoute,
+  //   loginRoute,
+  forgotPasswordRoute,
+  resetPasswordRoute,
   // loginRoute,
   selectRoleRoute,
   studentLoginRoute,
@@ -506,6 +554,7 @@ const routeTree = rootRoute.addChildren([
     teacherCourseInstructorsRoute,
     teacherCourseRegistrationRequests,
     teacherFeedBackEditorRoute,
+    teacherAuditRoute,
     teacherHealthPointsRoute,
     teacherHealthPointsDetailRoute
   ]),

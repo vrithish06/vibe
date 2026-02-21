@@ -25,11 +25,13 @@ import { PendingRegistrationNotification, ApprovedRegistrationNotification } fro
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { VersionWithCourse } from '@/app/pages/student/CourseRegistration';
 import { Registration, RegistrationStatus } from '@/app/pages/teacher/CourseRegistrationRequests';
-import { Field } from '@/app/pages/teacher/components/course-registration-modal';
+// import { Field } from '@/app/pages/teacher/components/course-registration-modal';
 import { IssueSort, IssueStatus } from '@/app/pages/student/FlagResponse';
 import { ISubmitFeedbackBody } from '@/components/Item-container';
 import { TranscriptResponse } from '@/types/ai.types';
+import { VideoOverallAnalytics, VideoUserAnalytics, VideoUserAnalyticsResponse } from '@/app/pages/teacher/teacher-course-page';
 import { WatchTimeTrackData } from '@/types/user_activity_event.types';
+import { start } from 'repl';
 
 // Add missing ObjectId type
 type ObjectId = string;
@@ -693,6 +695,10 @@ export function useCreateCourseVersion(): {
   };
 }
 
+// Get Audit details for a course version:
+
+
+
 // GET /courses/versions/{id}
 export function useCourseVersionById(id: string, enabled?: boolean): {
   data: components['schemas']['CourseVersionDataResponse'] | undefined,
@@ -924,6 +930,46 @@ export function useMoveSection(): {
 
 // Item hooks
 
+
+export function useCourseVersionAuditDetails(
+  courseId: string,
+  versionId: string,
+  page: number,
+  limit: number,
+  startDate?: string,
+  endDate?: string
+): {
+  data: any;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+} {
+  const result = api.useQuery(
+    "get",
+    "/audit-trails/course/{courseId}/version/{versionId}" as any,
+    {
+      params: {
+        path: { courseId, versionId },
+        query: { page, limit, startDate, endDate },
+      },
+    },
+    {
+      enabled: !!courseId && !!versionId,
+      keepPreviousData: true, // 🔥 Important for pagination UX
+    }
+  );
+
+  return {
+    data: result.data,
+    isLoading: result.isLoading,
+    error: result.error
+      ? result.error.message || "Failed to fetch audit details"
+      : null,
+    refetch: result.refetch,
+  };
+}
+
+
 // GET /courses/versions/{versionId}/modules/{moduleId}/sections/{sectionId}/items
 export function useItemsBySectionId(versionId: string, moduleId: string, sectionId: string): {
   data: components['schemas']['ItemDataResponse'] | undefined,
@@ -1031,6 +1077,94 @@ export function useItemById(
     refetch: result.refetch,
   };
 }
+
+
+
+export function useOverallVideoAnalytics(
+  courseId: string,
+  versionId: string,
+  itemId: string
+): {
+  data: VideoOverallAnalytics | null;
+  isLoading: boolean;
+  error: string | null;
+  errorName: string | null;
+  refetch: () => void;
+} {
+  const result = api.useQuery(
+    "get",
+    "/courses/{courseId}/versions/{versionId}/item/{itemId}/analytics",
+    {
+      params: { path: { courseId, versionId, itemId } },
+    },
+    {
+      enabled: !!courseId && !!versionId && !!itemId,
+    }
+  );
+
+  return {
+    data: result.data,
+    isLoading: result.isLoading,
+    error: result.error ? result.error.message || "Video analytics fetch failed" : null,
+    errorName: result.error ? result.error.name || null : null,
+    refetch: result.refetch,
+  };
+}
+
+export function useVideoUserAnalytics(
+  courseId: string,
+  versionId: string,
+  itemId: string,
+  query?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: 'name' | 'views' | 'watchHours';
+    sortOrder?: 'asc' | 'desc';
+  }
+): {
+  data: VideoUserAnalyticsResponse | null;
+  isLoading: boolean;
+  error: string | null;
+  errorName: string | null;
+  refetch: () => void;
+} {
+  const page = query?.page ?? 1;
+  const limit = query?.limit ?? 20;
+  const search = query?.search;
+  const sortBy = query?.sortBy;
+  const sortOrder = query?.sortOrder;
+
+  const result = api.useQuery(
+    "get",
+    "/courses/{courseId}/versions/{versionId}/item/{itemId}/analytics/users",
+    {
+      params: {
+        path: { courseId, versionId, itemId },
+        query: {
+          ...(search ? { search } : {}),
+          ...(sortBy ? { sortBy } : {}),
+          ...(sortOrder ? { sortOrder } : {}),
+          page,
+          limit,
+        },
+      },
+    },
+    {
+      enabled: !!courseId && !!versionId && !!itemId,
+      keepPreviousData: true,
+    }
+  );
+
+  return {
+    data: result.data ?? null,
+    isLoading: result.isLoading,
+    error: result.error ? result.error.message || "Video user analytics fetch failed" : null,
+    errorName: result.error ? result.error.name || null : null,
+    refetch: result.refetch,
+  };
+}
+
 
 export function useUpdateCourseItem(): {
   mutate: (variables: { params: { path: { versionId: string, itemId: string } }, body: components['schemas']['UpdateItemBody'] }) => void,
@@ -3456,6 +3590,81 @@ export const useToggleRegistrationStatus = (versionId: string): {
   };
 };
 
+export const useUpdateAutoApprovalsettings = (
+  versionId: string,
+): {
+  mutate: (params: { registrationsAutoApproved?: boolean; autoapproval_emails?: string[] }) => void;
+  mutateAsync: (params: { registrationsAutoApproved?: boolean; autoapproval_emails?: string[] }) => Promise<any>;
+  data: any;
+  error: string | null;
+  isPending: boolean;
+  isSuccess: boolean;
+  isError: boolean;
+  isIdle: boolean;
+  reset: () => void;
+  status: 'idle' | 'pending' | 'success' | 'error';
+} => {
+  const result = api.useMutation('put', '/course/registration/auto-approval/version/{versionId}' as any);
+
+  return {
+    mutate: (params: { registrationsAutoApproved?: boolean; autoapproval_emails?: string[] }) =>
+      result.mutate({
+        params: {
+          path: { versionId },
+        },
+        body: params,
+      }),
+
+    mutateAsync: (params: { registrationsAutoApproved?: boolean; autoapproval_emails?: string[] }) =>
+      result.mutateAsync({
+        params: {
+          path: { versionId },
+        },
+        body: params,
+      }),
+
+    data: result.data,
+    error: result.error
+      ? result.error.message || 'Failed to update auto-approval settings'
+      : null,
+    isPending: result.isPending,
+    isSuccess: result.isSuccess,
+    isError: result.isError,
+    isIdle: result.isIdle,
+    reset: result.reset,
+    status: result.status,
+  };
+};
+
+export const useAutoApprovalSettings = (
+  versionId: string,
+): {
+  data: { registrationsAutoApproved?: boolean; autoapproval_emails?: string[] } | undefined;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+} => {
+  const result = api.useQuery(
+    "get",
+    "/course/registration/build-form/version/{versionId}" as any,
+    {
+      params: {
+        path: { versionId },
+      },
+    },
+    {
+      enabled: !!versionId,
+    }
+  );
+  
+  return {
+    settings: result.data as { registrationsAutoApproved?: boolean; autoapproval_emails?: string[] } | undefined,
+    isLoading: result.isLoading,
+    error: result.error ? result.error.message || "Failed to fetch auto-approval settings" : null,
+    refetch: result.refetch,
+  };
+};
+
 
 export const useGetDynamicFields = (
   versionId: string,
@@ -3850,6 +4059,45 @@ export function useModuleProgress(
   };
 }
 
+// Hook for instructors to get module progress for a specific user
+export function useUserModuleProgress(
+  userId: string,
+  courseId: string,
+  versionId: string
+): {
+  data: {
+    modules: {
+      moduleId: string;
+      moduleName: string;
+      totalItems: number;
+      completedItems: number;
+    }[];
+  } | undefined;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+} {
+  const result = api.useQuery(
+    'get',
+    `/users/${userId}/enrollments/courses/${courseId}/versions/${versionId}/modules/progress` as any,
+    {
+      params: {
+        path: { userId, courseId, versionId }
+      }
+    },
+    {
+      enabled: !!userId && !!courseId && !!versionId
+    }
+  );
+
+  return {
+    data: result.data as any,
+    isLoading: result.isLoading,
+    error: result.error ? (result.error.message || "Failed to fetch module progress") : null,
+    refetch: result.refetch
+  };
+}
+
 
 export const useHideModule = (): {
   mutate: (variables: { params: { path: { versionId: string, moduleId: string } }, body: { hide: boolean } }) => void,
@@ -4044,12 +4292,14 @@ export function useRecalculateStudentProgress(): {
     body: {
       courseId: string;
       courseVersionId: string;
+      userId?: string;
     };
   }) => void;
   mutateAsync: (variables: {
     body: {
       courseId: string;
       courseVersionId: string;
+      userId?: string;
     };
   }) => Promise<string>;
   data: string | undefined;
@@ -4182,7 +4432,7 @@ export function useMarkNotificationAsRead(): {
   status: 'idle' | 'pending' | 'success' | 'error'
 } {
   const result = api.useMutation("patch", "/course/registration/notifications/{registrationId}/read");
-  
+
   return {
     ...result,
     error: result.error ? (result.error.message || 'Failed to mark notification as read') : null
@@ -4195,8 +4445,192 @@ export const useBulkUnenrollUsers = () => {
   return api.useMutation('post', '/users/enrollments/courses/{courseId}/versions/{versionId}/bulk-unenroll');
 };
 
+// Time Slots hooks
+
+// POST /timeslots/add
+export function useAddTimeSlots(): {
+  mutate: (variables: { body: { courseId: string; courseVersionId: string; timeSlots: Array<{ from: string; to: string; studentIds: string[] }> } }) => void,
+  mutateAsync: (variables: { body: { courseId: string; courseVersionId: string; timeSlots: Array<{ from: string; to: string; studentIds: string[] }> } }) => Promise<{ success: boolean; message?: string }>,
+  data: { success: boolean; message?: string } | undefined,
+  error: string | null,
+  isPending: boolean,
+  isSuccess: boolean,
+  isError: boolean,
+  isIdle: boolean,
+  reset: () => void,
+  status: 'idle' | 'pending' | 'success' | 'error'
+} {
+  const result = api.useMutation("post", "/timeslots/add");
+  return {
+    ...result,
+    error: result.error ? (result.error.message || 'Failed to add time slots') : null
+  };
+}
+
+// POST /timeslots/remove
+export function useRemoveTimeSlots(): {
+  mutate: (variables: { body: { courseId: string; courseVersionId: string; timeSlotsToRemove: Array<{ from: string; to: string }> } }) => void,
+  mutateAsync: (variables: { body: { courseId: string; courseVersionId: string; timeSlotsToRemove: Array<{ from: string; to: string }> } }) => Promise<{ success: boolean; message?: string }>,
+  data: { success: boolean; message?: string } | undefined,
+  error: string | null,
+  isPending: boolean,
+  isSuccess: boolean,
+  isError: boolean,
+  isIdle: boolean,
+  reset: () => void,
+  status: 'idle' | 'pending' | 'success' | 'error'
+} {
+  const result = api.useMutation("post", "/timeslots/remove");
+  return {
+    ...result,
+    error: result.error ? (result.error.message || 'Failed to remove time slots') : null
+  };
+}
+
+// PUT /timeslots/update
+export function useUpdateTimeSlot(): {
+  mutate: (variables: { body: { courseId: string; courseVersionId: string; oldTimeSlot: { from: string; to: string }; newTimeSlot: { from: string; to: string } } }) => void,
+  mutateAsync: (variables: { body: { courseId: string; courseVersionId: string; oldTimeSlot: { from: string; to: string }; newTimeSlot: { from: string; to: string } } }) => Promise<{ success: boolean; message?: string }>,
+  data: { success: boolean; message?: string } | undefined,
+  error: string | null,
+  isPending: boolean,
+  isSuccess: boolean,
+  isError: boolean,
+  isIdle: boolean,
+  reset: () => void,
+  status: 'idle' | 'pending' | 'success' | 'error'
+} {
+  const result = api.useMutation("put", "/timeslots/update");
+  return {
+    ...result,
+    error: result.error ? (result.error.message || 'Failed to update time slot') : null
+  };
+}
+
+// PUT /timeslots/toggle
+export function useToggleTimeSlots(): {
+  mutate: (variables: { body: { courseId: string; courseVersionId: string; isActive: boolean } }) => void,
+  mutateAsync: (variables: { body: { courseId: string; courseVersionId: string; isActive: boolean } }) => Promise<{ success: boolean; message?: string }>,
+  data: { success: boolean; message?: string } | undefined,
+  error: string | null,
+  isPending: boolean,
+  isSuccess: boolean,
+  isError: boolean,
+  isIdle: boolean,
+  reset: () => void,
+  status: 'idle' | 'pending' | 'success' | 'error'
+} {
+  const result = api.useMutation("put", "/timeslots/toggle");
+  return {
+    ...result,
+    error: result.error ? (result.error.message || 'Failed to toggle time slots') : null
+  };
+}
+
+// GET /timeslots/course/{courseId}/version/{courseVersionId}
+export function useGetTimeSlots(
+  courseId: string | undefined,
+  courseVersionId: string | undefined,
+  enabled: boolean = true
+): {
+  data: { isActive: boolean; slots: Array<{ from: string; to: string; studentIds: string[] }> } | null | undefined,
+  isLoading: boolean,
+  error: string | null,
+  refetch: () => void
+} {
+  const result = api.useQuery(
+    "get",
+    "/timeslots/course/{courseId}/version/{courseVersionId}",
+    {
+      params: {
+        path: { courseId: courseId!, courseVersionId: courseVersionId! }
+      }
+    },
+    {
+      enabled: !!courseId && !!courseVersionId && enabled,
+      retry: 1,
+      refetchOnWindowFocus: false
+    }
+  );
+
+  return {
+    data: result.data?.data,
+    isLoading: result.isLoading,
+    error: result.error ? (result.error.message || 'Failed to fetch time slots') : null,
+    refetch: result.refetch
+  };
+}
+
+// GET /timeslots/students/{courseId}/{courseVersionId}
+export function useGetStudentsInTimeSlots(
+  courseId: string | undefined,
+  courseVersionId: string | undefined,
+  enabled: boolean = true
+): {
+  data: Array<{ from: string; to: string; studentIds: string[] }> | undefined,
+  isLoading: boolean,
+  error: string | null,
+  refetch: () => void
+} {
+  const result = api.useQuery(
+    "get",
+    "/timeslots/students/{courseId}/{courseVersionId}",
+    {
+      params: {
+        path: { courseId: courseId!, courseVersionId: courseVersionId! }
+      }
+    },
+    {
+      enabled: !!courseId && !!courseVersionId && enabled,
+      retry: 1,
+      refetchOnWindowFocus: false
+    }
+  );
+
+  return {
+    data: result.data?.data,
+    isLoading: result.isLoading,
+    error: result.error ? (result.error.message || 'Failed to fetch students in time slots') : null,
+    refetch: result.refetch
+  };
+}
+
+// GET /timeslots/check-access/{courseId}/{courseVersionId}
+export function useCheckTimeSlotAccess(
+  courseId: string | undefined,
+  courseVersionId: string | undefined,
+  enabled: boolean = true
+): {
+  data: { canAccess: boolean; message?: string } | undefined,
+  isLoading: boolean,
+  error: string | null,
+  refetch: () => void
+} {
+  const result = api.useQuery(
+    "get",
+    "/timeslots/check-access/{courseId}/{courseVersionId}",
+    {
+      params: {
+        path: { courseId: courseId!, courseVersionId: courseVersionId! }
+      }
+    },
+    {
+      enabled: !!courseId && !!courseVersionId && enabled,
+      retry: 1,
+      refetchOnWindowFocus: false
+    }
+  );
+
+  return {
+    data: result.data,
+    isLoading: result.isLoading,
+    error: result.error ? (result.error.message || 'Failed to check time slot access') : null,
+    refetch: result.refetch
+  };
+}
+
 // GET /users/enrollments
-export function useUserEnrollmentsDetails( enabled: boolean = true, search?: string, role = "STUDENT", courseVersionId?: string, ): {
+export function useUserEnrollmentsDetails(enabled: boolean = true, search?: string, role = "STUDENT", courseVersionId?: string,): {
   data: components['schemas']['EnrollmentResponse'] | undefined,
   isLoading: boolean,
   error: string | null,
@@ -4204,7 +4638,7 @@ export function useUserEnrollmentsDetails( enabled: boolean = true, search?: str
 } {
   const result = api.useQuery("get", "/users/enrollments/details", {
     params: {
-      query: {  search, role, courseVersionId  }
+      query: { search, role, courseVersionId }
     },
     enabled: enabled
   });

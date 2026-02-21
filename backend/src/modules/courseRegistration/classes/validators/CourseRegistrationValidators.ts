@@ -183,11 +183,11 @@ export class UpdateRegistrationSchemasBody {
   @JSONSchema({ description: "Dynamic UI Schema for the form" })
   uiSchema: Record<string, any>;
 
-  @IsBoolean()
-  @IsOptional()
-  @JSONSchema({ description: "Active status of course registration" })
-  isActive?: boolean;
+
+
+
 }
+
 
 export class ToggleRegistrationBody {
   @IsBoolean()
@@ -197,6 +197,25 @@ export class ToggleRegistrationBody {
     example: true
   })
   isActive: boolean;
+}
+
+export class AutoApprovalSettingsBody {
+  @IsBoolean()
+  @IsNotEmpty()
+  @JSONSchema({
+    example: true,
+    description: 'Whether auto-approval is enabled or not'
+  })
+  registrationsAutoApproved: boolean;
+
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayUnique()
+  @JSONSchema({
+    example: ['iitm.ac.in', 'gmail.com'],
+    description: 'Email patterns to auto-approve (if empty, all emails are approved)'
+  })
+  autoapproval_emails?: string[];
 }
 
 export class PendingRegistrationResponse {

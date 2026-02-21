@@ -13,7 +13,6 @@ import {
 } from '#root/shared/interfaces/models.js';
 import { GLOBAL_TYPES } from '#root/types.js';
 import { EnrollmentRepository } from '#shared/database/providers/mongo/repositories/EnrollmentRepository.js';
-import { HealthPointsRepository } from '#shared/database/providers/mongo/repositories/HealthPointsRepository.js';
 import { Enrollment } from '#users/classes/transformers/Enrollment.js';
 import { EnrollmentStats, USERS_TYPES } from '#users/types.js';
 import { injectable, inject } from 'inversify';
@@ -489,6 +488,7 @@ export class EnrollmentService extends BaseService {
             role: enr.role,
             status: enr.status,
             enrollmentDate: new Date(enr.enrollmentDate),
+            assignedTimeSlot: enr.assignedTimeSlot,
             course: this.filterCourseVersions(enr.course, enrolledVersionIds),
             percentCompleted: enr.percentCompleted || 0,
             moduleNumber: enr.moduleNumber,
@@ -511,6 +511,7 @@ export class EnrollmentService extends BaseService {
       role: enr.role,
       status: enr.status,
       enrollmentDate: new Date(enr.enrollmentDate),
+      assignedTimeSlot: enr.assignedTimeSlot,
       course: this.filterCourseVersions(enr.course, enrolledVersionIds),
     }));
   }
@@ -646,6 +647,7 @@ export class EnrollmentService extends BaseService {
             course: this.filterCourseVersions(enr.course, enrolledVersionIds),
             // courseVersion: enr.courseVersion,
             percentCompleted: enr.percentCompleted || 0,
+            assignedTimeSlot: enr.assignedTimeSlot,
             moduleNumber: enr.moduleNumber,
             sectionNumber: enr.sectionNumber,
             itemType: enr.itemType,
@@ -862,7 +864,6 @@ export class EnrollmentService extends BaseService {
 
     // 3. Get all user IDs from enrollments
     const userIds = enrollments.map(e => e.userId);
-    console.log('🔍 User IDs for quiz lookup:', enrollments);
 
     // 4. Batch fetch quiz submissions for all users
     const quizSubmissions =

@@ -27,11 +27,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCourseStore } from "@/store/course-store";
 import { toast } from "sonner";
-import { useBulkUpdateRegistrationStatus, useGetCourseRegistrationRequests, useUpdateRegistrationStatus, useGetRegistrationStatus, useToggleRegistrationStatus } from "@/hooks/hooks";
+import { useBulkUpdateRegistrationStatus, useGetCourseRegistrationRequests, useUpdateRegistrationStatus, useGetRegistrationStatus, useToggleRegistrationStatus, useAutoApprovalSettings } from "@/hooks/hooks";
 import { Pagination } from "@/components/ui/Pagination";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import ConfirmationModal from "./components/confirmation-modal";
 import { FormBuilder } from "./components/course-registration-modal";
+import AutoApprovalModal from "./components/auto-approval-modal";
 
 export interface Registration {
   _id: string;
@@ -62,6 +63,7 @@ export default function CourseRegistrationRequests() {
   const [isUnsavedChanges, setIsUnsavedChanges] = useState(false);
   const [isRefresh, setIsRefresh] = useState(false);
   const [isActive, setIsActive] = useState<boolean>(true);
+  const [isAutoApprovalModalOpen, setIsAutoApprovalModalOpen] = useState(false);
   const { currentCourse } = useCourseStore()
   const versionId = currentCourse?.versionId
   const [initialFetchDone, setInitialFetchDone] = useState(false);
@@ -82,7 +84,7 @@ export default function CourseRegistrationRequests() {
 
   const { data: statusData, refetch: statusRefetch } = useGetRegistrationStatus(versionId as string);
   const { mutateAsync: toggleStatus, isPending: isTogglingStatus } = useToggleRegistrationStatus(versionId as string);
-
+  const { settings: autoApprovalSettings, isLoading: isLoadingAutoApproval } = useAutoApprovalSettings(versionId as string);
 
   const { mutateAsync: updateStatus, isPending: isUpdatingStatus } = useUpdateRegistrationStatus();
   const { mutateAsync: updateBulkStatus, isPending: isUpdatingBulkStatus } = useBulkUpdateRegistrationStatus();
@@ -141,28 +143,22 @@ useEffect(() => {
   const handleBulkApprove = async () => {
     if (isUpdatingBulkStatus || isUpdatingStatus) return;
 
-    const allPendingRegistrationIds = registrationsData?.registrations?.filter((reg)=>reg.status=="PENDING").map((reg) => reg._id) || [];
-
-    if (!allPendingRegistrationIds.length) {
-      toast.error("No pending registrations available for approval.");
+    if (!selectedIds || selectedIds.length === 0) {
+      toast.error("Please select at least one registration to approve.");
       setTimeout(()=>{
         setIsBulkApproveOpen(false);
       },1000)
       return;
     }
-    const idsToApprove = selectedIds && selectedIds.length > 0 ? selectedIds : allPendingRegistrationIds;
+
     try {
-      await updateBulkStatus(idsToApprove);
+      await updateBulkStatus(selectedIds);
 
-      const successMessage =
-        idsToApprove.length > 0
-          ? 'Selected registrations approved successfully'
-          : 'All registrations approved successfully';
+      toast.success(
+        `${selectedIds.length} registration${selectedIds.length > 1 ? 's' : ''} approved successfully`
+      );
 
-      toast.success(successMessage);
-
-      if (idsToApprove.length > 0) setSelectedIds([]);
-
+      setSelectedIds([]);
       registrationsRefetch();
       setIsBulkApproveOpen(false);
     } catch (error: any) {
@@ -305,9 +301,9 @@ useEffect(() => {
         isOpen={isBulkApproveOpen}
         onClose={() => setIsBulkApproveOpen(false)}
         onConfirm={() => handleBulkApprove()}
-        title="Approve All Registrations"
-        description="Are you sure you want to approve all selected registrations? This action cannot be undone."
-        confirmText="Approve All"
+        title="Approve Selected Registrations"
+        description={`Are you sure you want to approve ${selectedIds.length} selected registration${selectedIds.length > 1 ? 's' : ''}? This action cannot be undone.`}
+        confirmText={`Approve ${selectedIds.length} Registration${selectedIds.length > 1 ? 's' : ''}`}
         cancelText="Cancel"
         isDestructive={false}
         isLoading={isUpdatingBulkStatus}
@@ -464,6 +460,20 @@ useEffect(() => {
             isTogglingStatus={isTogglingStatus}
           />
         </div>
+          <Dialog open={isAutoApprovalModalOpen} onOpenChange={setIsAutoApprovalModalOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Settings className="h-4 w-4" />
+                Configure Auto Approval
+              </Button>
+            </DialogTrigger>
+            <AutoApprovalModal
+              isOpen={isAutoApprovalModalOpen}
+              onOpenChange={setIsAutoApprovalModalOpen}
+              versionId={versionId!}
+              currentSettings={autoApprovalSettings}
+            />
+          </Dialog>
         {/* <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
           <div className="flex-1 relative">
             <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
@@ -1037,13 +1047,13 @@ export const RegistrationActions = ({
 
       <Button
         onClick={() => setIsBulkApproveOpen(true)}
-        disabled={isUpdatingBulkStatus || isUpdatingStatus}
+        disabled={isUpdatingBulkStatus || isUpdatingStatus || !selectedIds || selectedIds.length === 0}
         variant="outline"
-        className="hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-300 dark:hover:border-blue-700 transition-colors"
+        className="hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-300 dark:hover:border-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <CheckCircle className="h-4 w-4 mr-2" />
         {(!selectedIds || selectedIds.length === 0)
-          ? "Approve All"
+          ? "Approve Selected"
           : `Approve Selected (${selectedIds.length})`}
       </Button>
 
