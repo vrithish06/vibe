@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { Loader2, ArrowLeft, TrendingUp } from 'lucide-react';
 import { useCourseHealthPoints } from '@/hooks/useHealthPoints';
 import { useCourseStore } from '@/store/course-store';
 import { useNavigate } from '@tanstack/react-router';
@@ -61,17 +61,33 @@ export function HealthPointsOverview() {
         );
     }
 
+    const averageHP = students?.length
+        ? Math.round(students.reduce((acc: number, curr: any) => acc + curr.currentHP, 0) / students.length)
+        : 0;
+
     return (
         <div className="container mx-auto py-8 space-y-6">
-            <div className="flex items-center gap-4">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => window.history.back()}
-                >
-                    <ArrowLeft className="w-4 h-4" />
-                </Button>
-                <h1 className="text-3xl font-bold">Health Points Overview</h1>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => window.history.back()}
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                    </Button>
+                    <h1 className="text-3xl font-bold">Health Points Overview</h1>
+                </div>
+
+                <div className="flex items-center gap-3 bg-card border rounded-xl px-5 py-3 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="p-2 bg-primary/10 rounded-full">
+                        <TrendingUp className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Class Average</span>
+                        <span className="text-2xl font-bold text-foreground">{averageHP}</span>
+                    </div>
+                </div>
             </div>
 
             <div className="border rounded-lg p-4 bg-card">
