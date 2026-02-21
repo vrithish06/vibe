@@ -178,7 +178,17 @@ export class HealthPointsRepository {
             },
             {
                 $addFields: {
-                    createdByName: { $concat: ['$creator.firstName', ' ', '$creator.lastName'] }
+                    createdByName: {
+                        $trim: {
+                            input: {
+                                $concat: [
+                                    { $ifNull: ['$creator.firstName', ''] },
+                                    ' ',
+                                    { $ifNull: ['$creator.lastName', ''] }
+                                ]
+                            }
+                        }
+                    }
                 }
             },
             { $sort: { createdAt: -1 } },
