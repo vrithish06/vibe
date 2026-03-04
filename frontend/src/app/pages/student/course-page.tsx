@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useCourseVersionById, useUserProgress, useItemsBySectionId, useItemById, useProctoringSettings, useGetProcotoringSettings, useSubmitFlag, enqueueNavigation, useSkipOptionalItem, useRecalculateStudentProgress } from "@/hooks/hooks";
+import { useCourseVersionById, useUserProgress, useItemsBySectionId, useItemById, useProctoringSettings, useGetProcotoringSettings, useSubmitFlag, enqueueNavigation, useSkipOptionalItem, useRecalculateStudentProgress, useActivitiesForStudent, useSubmitActivity } from "@/hooks/hooks";
 import { useAuthStore } from "@/store/auth-store";
 import { useCourseStore } from "@/store/course-store";
 import { Link, Navigate, useRouter } from "@tanstack/react-router";
@@ -22,7 +22,6 @@ import StudentProjectItem from "./components/StudentProjectItem";
 import type { Item, ItemContainerRef } from "@/types/item-container.types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuroraText } from "@/components/magicui/aurora-text";
-import StudentHealthPoints from "./components/StudentHealthPoints";
 import confetti from "canvas-confetti";
 import {
   ChevronRight,
@@ -42,7 +41,6 @@ import {
   X,
   CircleCheckIcon,
   Headphones,
-  Activity,
   ExternalLink, Menu
 } from "lucide-react";
 import FloatingVideo, { FloatingVideoPlaceholder } from "@/components/floating-video";
@@ -56,8 +54,22 @@ import ItemContainer from "@/components/Item-container";
 import logo from "../../../../public/img/vibe_logo_img.ico"
 import { registerStream, unRegisterStream } from "@/lib/MediaRegistry";
 import { useModuleProgress } from "@/hooks/hooks";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { isMobile } from "react-device-detect";
 import MobileFallbackScreen from "@/components/MobileFallbackScreen";
+
+// Helper: extract a plain string from a MongoDB _id ({ $oid: '...' }, ObjectId instances, or plain string)
+const getIdStr = (id: any): string => {
+  if (!id) return '';
+  if (typeof id === 'string') return id;
+  if (typeof id === 'object') {
+    if (id.$oid) return id.$oid;
+    if (id.toString && typeof id.toString === 'function') {
+      const s = id.toString();
+      if (s !== '[object Object]') return s;
+    }
+  }
+  return String(id);
+};
 
 // Helper function to get icon for item type
 const getItemIcon = (type: string) => {
@@ -109,10 +121,7 @@ export default function CoursePage() {
   const { mutateAsync: recalculateStudentProgressAsync } = useRecalculateStudentProgress();
   const [closing, setClosing] = useState(false);
   const [allProctorsDisabled, setAllProctorsDisabled] = useState(false);
-  const [showHealthPoints, setShowHealthPoints] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
-
-  const isMobile = useIsMobile();
 
 
 
@@ -156,6 +165,9 @@ export default function CoursePage() {
   // ✅ Add the missing ref declaration
   const itemContainerRef = useRef<ItemContainerRef>(null);
 
+  // ✅ Track completed item IDs to prevent duplicate start/stop requests
+  const completedItemIdsRef = useRef<Set<string>>(new Set<string>());
+
   // Ref for autoscroll to selected sidebar item
   const selectedItemRef = useRef<HTMLButtonElement | null>(null);
 
@@ -188,10 +200,40 @@ export default function CoursePage() {
   const [anomalies, setAnomalies] = useState<string[]>([]);
   const [isQuizSkipped, setIsQuizSkipped] = useState(false);
   const [readyToDetect, setReadyToDetect] = useState(false);
-  const [isNavigatingToPrev, setIsNavigatingToPrev] = useState<boolean>(false);
-  const completedItemIdsRef = useRef<Set<string>>(new Set());
   // State for sidebar visibility
   const [isDesktopSidebarVisible, setIsDesktopSidebarVisible] = useState(true);
+
+  // ---- Activities ----
+  const { data: activitiesData, isLoading: activitiesLoading } = useActivitiesForStudent(VERSION_ID);
+  const activities: any[] = Array.isArray(activitiesData) ? activitiesData : [];
+
+  // Debug: Log activities for troubleshooting
+  useEffect(() => {
+    if (activities.length > 0) {
+      console.log('🎯 Activities loaded:', activities.map((a: any) => ({
+        id: getIdStr(a._id),
+        title: a.title,
+        status: a.status
+      })));
+    }
+  }, [activities]);
+
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const selectedActivity = activities.find((a: any) => getIdStr(a._id) === selectedActivityId) || null;
+
+  // Debug: Log selected activity
+  useEffect(() => {
+    console.log('📍 Selected Activity ID:', selectedActivityId);
+    console.log('📋 Found Activity:', selectedActivity?.title || 'NOT FOUND');
+  }, [selectedActivityId, selectedActivity]);
+  // Tracks which activities the student has self-declared as completed (locally)
+  const [acknowledgedActivities, setAcknowledgedActivities] = useState<Record<string, boolean>>({});
+  // State for the self-declaration confirmation dialog
+  const [showDeclarationDialog, setShowDeclarationDialog] = useState(false);
+  const [isDeclarationPending, setIsDeclarationPending] = useState(false);
+
+  // Mutation for submitting activities
+  const submitActivityMutation = useSubmitActivity();
 
 
   // State to track when we're waiting for next section items to load
@@ -346,8 +388,6 @@ export default function CoursePage() {
     }
 
     if (itemError && selectedItemId && itemErrorName === "ForbiddenError") {
-
-      toast.error(itemError);
       // Clear loading state on error
       setIsNavigatingToNext(false);
       setIsItemForbidden(true);
@@ -711,7 +751,6 @@ export default function CoursePage() {
 
         // Clear errors 
         setIsItemForbidden(false);
-        setShowHealthPoints(false);
 
         // Update states to trigger fetch/expansion
         setSelectedModuleId(moduleId);
@@ -1273,7 +1312,7 @@ export default function CoursePage() {
   // Handle navigation to previous video (used by quiz component)
   const handlePrevVideo = useCallback(async () => {
     // Set loading state
-    setIsNavigatingToPrev(true);
+    setIsNavigatingToNext(true);
 
     try {
       // Stop current item before moving to previous video with proper cleanup
@@ -1288,7 +1327,7 @@ export default function CoursePage() {
       const prevVideoItem = findPreviousVideoItem();
 
       if (!prevVideoItem) {
-        setIsNavigatingToPrev(false);
+        setIsNavigatingToNext(false);
         return;
       }
 
@@ -1296,7 +1335,7 @@ export default function CoursePage() {
 
       // Ensure all values are defined before switching
       if (!moduleId || !sectionId || !itemId) {
-        setIsNavigatingToPrev(false);
+        setIsNavigatingToNext(false);
         return;
       }
 
@@ -1334,12 +1373,12 @@ export default function CoursePage() {
 
       // Clear loading state after successful navigation
       setTimeout(() => {
-        setIsNavigatingToPrev(false);
+        setIsNavigatingToNext(false);
       }, 500);
     } catch (error) {
       console.error('Error navigating to previous video:', error);
       // Clear loading state on error
-      setIsNavigatingToPrev(false);
+      setIsNavigatingToNext(false);
     }
   }, [
     findPreviousVideoItem,
@@ -1552,8 +1591,6 @@ export default function CoursePage() {
                                       <SidebarMenuSubButton
                                         onClick={() => toggleSection(moduleId, sectionId)}
                                         isActive={isCurrentSection}
-                                        aria-expanded={isModuleExpanded}
-                                        data-state={isModuleExpanded ? 'open' : 'closed'}
                                         className="group relative h-8 px-3 w-full rounded-md text-xs transition-all duration-200 hover:bg-accent/10 hover:text-accent-foreground data-[state=active]:bg-accent/15 data-[state=active]:text-accent-foreground"
                                       >
                                         <ChevronRight
@@ -1585,25 +1622,25 @@ export default function CoursePage() {
                                             sortItemsByOrder(sectionItems[sectionId]).map((item: any) => {
                                               const itemId = item._id;
                                               const isCurrentItem = itemId === selectedItemId;
-
+                                              if (item.type === 'QUIZ') return null; // Skip quizzes in sidebar
                                               return (
                                                 <SidebarMenuSubItem key={itemId}>
                                                   <SidebarMenuSubButton
                                                     onClick={() => handleSelectItem(moduleId, sectionId, itemId)}
                                                     isActive={isCurrentItem}
-                                                    className="group relative h-8 px-3 w-full rounded-md transition-all duration-200 hover:bg-accent/10 dark:data-[state=active]:bg-primary/10 data-[state=active]:bg-primary/10 data-[state=active]:text-primary justify-start"
+                                                    className="group relative h-12 px-3 w-full  rounded-md transition-all duration-200 hover:bg-accent/10 data-[state=active]:bg-primary/10 data-[state=active]:text-primary justify-start"
                                                     // Assign ref only to the selected item for autoscroll
                                                     ref={isCurrentItem ? selectedItemRef : undefined}
                                                   >
                                                     <div className="flex items-center gap-2 w-full min-w-0">
                                                       <div className={`p-0.5 rounded transition-colors flex-shrink-0 ${isCurrentItem
-                                                        ? "dark:bg-primary/15 dark:text-primary bg-primary/50 text-white/80"
+                                                        ? "bg-primary/90 text-white/80 dark:bg-primary/15 dark:text-primary"
                                                         : "bg-accent/15 text-accent-foreground group-hover:bg-accent/25"
                                                         }`}>
                                                         {getItemIcon(item.type)}
                                                       </div>
                                                       <div className="flex-1 text-left min-w-0">
-                                                        <div className="text-xs font-medium truncate w-full " title={currentItem?.name || 'Loading...'}>
+                                                        <div className="text-xs font-semibold truncate w-full " title={item?.name || 'Loading...'}>
                                                           {(() => {
                                                             // Show loading state if this is the selected item and it's loading
                                                             if (selectedItemId === itemId && itemLoading) {
@@ -1643,6 +1680,65 @@ export default function CoursePage() {
                         );
                       })}
                     </SidebarMenu>
+
+                    {/* ── Activities ── */}
+                    {(activitiesLoading || activities.length > 0) && (
+                      <div className="px-2 pt-4 pb-2">
+                        <div className="flex items-center gap-2 mb-2 px-1">
+                          <FileText className="h-3.5 w-3.5 text-orange-500" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Activities
+                          </span>
+                        </div>
+                        {activitiesLoading ? (
+                          <div className="flex justify-center py-3">
+                            <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1">
+                            {activities.map((activity: any) => {
+                              const actId = getIdStr(activity._id);
+                              const isSelected = selectedActivityId === actId;
+                              const isDone = acknowledgedActivities[actId];
+                              const deadlineDate = activity.deadline ? new Date(activity.deadline) : null;
+                              const isOverdue = deadlineDate && deadlineDate < new Date();
+                              return (
+                                <button
+                                  key={actId}
+                                  onClick={() => {
+                                    setSelectedActivityId(actId);
+                                    // Clear any selected course item and hide current item view
+                                    setSelectedItemId(null);
+                                    setCurrentItem(null);
+                                  }}
+                                  className={`w-full text-left rounded-lg px-3 py-2 transition-all duration-150 border ${isSelected
+                                    ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700'
+                                    : 'bg-card hover:bg-accent/40 border-transparent hover:border-border/40'
+                                    }`}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="text-xs font-medium leading-snug truncate flex-1">
+                                      {activity.title}
+                                    </span>
+                                    {isDone ? (
+                                      <CheckCircle className="h-3.5 w-3.5 text-green-500 flex-shrink-0 mt-0.5" />
+                                    ) : (
+                                      <div className={`h-1.5 w-1.5 rounded-full mt-1.5 flex-shrink-0 ${isOverdue ? 'bg-red-500' : 'bg-orange-400'}`} />
+                                    )}
+                                  </div>
+                                  {deadlineDate && (
+                                    <div className={`text-[10px] mt-0.5 ${isOverdue ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                      {isOverdue ? 'Overdue: ' : 'Due: '}
+                                      {deadlineDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </ScrollArea>
                 </SidebarContent>
                 <SidebarFooter className="border-t border-border/40 bg-gradient-to-t from-sidebar/80 to-sidebar/60 ">
@@ -1678,20 +1774,6 @@ export default function CoursePage() {
                 {/* Navigation Footer */}
                 <SidebarFooter className="border-t border-border/40 bg-gradient-to-t from-sidebar/80 to-sidebar/60">
                   <SidebarMenu className="space-y-1 pl-2 py-3">
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        onClick={() => setShowHealthPoints(true)}
-                        className={`h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm ${showHealthPoints ? 'bg-primary/5 text-primary' : ''}`}
-                      >
-                        <div className="flex items-center gap-3 w-full text-left">
-                          <div className="p-1 rounded-md bg-accent/15">
-                            <Activity className={`h-4 w-4 ${showHealthPoints ? 'text-primary' : 'text-accent-foreground'}`} />
-                          </div>
-                          <span className="text-sm font-medium">Health Points</span>
-                        </div>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         asChild
@@ -1806,8 +1888,8 @@ export default function CoursePage() {
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <div className="text-xl font-medium text-foreground truncate" title={currentItem ? currentItem.name : 'Select content to begin learning'}>
-                    <b>{currentItem ? currentItem.name : 'Select content to begin learning'}</b>
+                  <div className="text-xl font-medium text-foreground truncate" title={currentItem ? currentItem.name : selectedActivity ? selectedActivity.title : 'Select content to begin learning'}>
+                    <b>{currentItem ? currentItem.name : selectedActivity ? selectedActivity.title : 'Select content to begin learning'}</b>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-auto">
@@ -1951,11 +2033,7 @@ export default function CoursePage() {
                   onSubmit={handleFlagSubmit}
                   isSubmitting={isPending}
                 />
-                {showHealthPoints ? (
-                  <div className="relative z-10 w-full h-full flex flex-col items-center">
-                    <StudentHealthPoints courseId={COURSE_ID} />
-                  </div>
-                ) : currentItem ? (
+                {currentItem ? (
                   <div className="relative z-10 h-full flex flex-col mb-2  sm:mb-1">
                     <div className="flex justify-end mb-1 me-10 gap-2 ">
                       {!isFlagSubmitted &&
@@ -1990,7 +2068,6 @@ export default function CoursePage() {
                         onNext={handleNext}
                         isProgressUpdating={isNavigatingToNext}
                         completedItemIdsRef={completedItemIdsRef}
-                        isAlreadyWatched={currentItem.isAlreadyWatched}
                       />
                     ) : (
 
@@ -2001,7 +2078,6 @@ export default function CoursePage() {
                         onNext={handleNext}
                         onPrevVideo={handlePrevVideo}
                         isProgressUpdating={isNavigatingToNext}
-                        isNavigatingToPrev={isNavigatingToPrev}
                         attemptId={attemptId || undefined}
                         setAttemptId={setAttemptId}
                         rewindVid={rewindVid}
@@ -2018,10 +2094,192 @@ export default function CoursePage() {
                         versionId={VERSION_ID}
                         sectionId={sectionId}
                         completedItemIdsRef={completedItemIdsRef}
-                        nextItem={findNextItem()}
+                        nextItem={findNextItem() || { itemId: '' }}
                       />
                     )}
 
+                  </div>
+                ) : selectedActivity ? (
+                  /* ─────── Activity Detail Panel ─────── */
+                  <div className="relative z-10 h-full flex flex-col overflow-auto p-4 sm:p-6 lg:p-8">
+                    {/* Declaration warning dialog */}
+                    <Dialog open={showDeclarationDialog} onOpenChange={setShowDeclarationDialog}>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                            <AlertCircle className="h-5 w-5" />
+                            Declaration Warning
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-4">
+                            <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed font-medium">
+                              ⚠️ You are accepting that you have completed this activity.
+                            </p>
+                            <p className="text-sm text-amber-700 dark:text-amber-300 leading-relaxed mt-2">
+                              If we find you guilty of a false declaration, disciplinary actions will be taken.
+                            </p>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Please confirm that you have genuinely completed <strong>"{selectedActivity.title}"</strong>.
+                          </p>
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setShowDeclarationDialog(false)}
+                            disabled={isDeclarationPending}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            disabled={isDeclarationPending}
+                            onClick={async () => {
+                              setIsDeclarationPending(true);
+                              try {
+                                // Submit activity and award HP
+                                const result = await submitActivityMutation.mutateAsync(getIdStr(selectedActivity._id));
+
+                                // Mark locally as acknowledged
+                                setAcknowledgedActivities(prev => ({ ...prev, [getIdStr(selectedActivity._id)]: true }));
+
+                                setShowDeclarationDialog(false);
+
+                                // Show success with HP awarded
+                                toast.success(
+                                  `🎉 Activity completed! You earned ${result.hpAwarded || 0} HP!`,
+                                  { position: 'top-right', duration: 4000 }
+                                );
+                              } catch (error: any) {
+                                toast.error(
+                                  error.message || 'Failed to submit activity',
+                                  { position: 'top-right' }
+                                );
+                              } finally {
+                                setIsDeclarationPending(false);
+                              }
+                            }}
+                          >
+                            {isDeclarationPending ? (
+                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                            ) : (
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                            )}
+                            Yes, I have completed it
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+
+                    {/* Activity card */}
+                    <div className="max-w-2xl mx-auto w-full space-y-6">
+                      {/* Header */}
+                      <div className="flex items-start gap-4">
+                        <div className="p-3 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex-shrink-0">
+                          <FileText className="h-6 w-6" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h1 className="text-2xl font-bold text-foreground leading-tight">
+                            {selectedActivity.title}
+                          </h1>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <Badge variant="outline" className="text-xs">
+                              {selectedActivity.activityType?.replace(/_/g, ' ') || 'Activity'}
+                            </Badge>
+                            {selectedActivity.isMandatory && (
+                              <Badge className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800">
+                                Required
+                              </Badge>
+                            )}
+                            {acknowledgedActivities[getIdStr(selectedActivity._id)] && (
+                              <Badge className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Completed
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <Separator />
+
+                      {/* Deadline */}
+                      {selectedActivity.deadline && (() => {
+                        const dl = new Date(selectedActivity.deadline);
+                        const overdue = dl < new Date();
+                        return (
+                          <div className={`flex items-center gap-3 p-4 rounded-lg border ${overdue ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' : 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800'}`}>
+                            <AlertCircle className={`h-5 w-5 flex-shrink-0 ${overdue ? 'text-red-500' : 'text-blue-500'}`} />
+                            <div>
+                              <p className={`text-sm font-semibold ${overdue ? 'text-red-700 dark:text-red-400' : 'text-blue-700 dark:text-blue-400'}`}>
+                                {overdue ? 'Submission Overdue' : 'Deadline'}
+                              </p>
+                              <p className={`text-sm ${overdue ? 'text-red-600 dark:text-red-300' : 'text-blue-600 dark:text-blue-300'}`}>
+                                {dl.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                {' at '}
+                                {dl.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Description */}
+                      {selectedActivity.description && (
+                        <div className="space-y-2">
+                          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Description</h2>
+                          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                            {selectedActivity.description}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Reward info */}
+                      {selectedActivity.rewardValue != null && (
+                        <div className="flex items-center gap-3 p-4 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800">
+                          <Target className="h-5 w-5 text-purple-500 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-purple-700 dark:text-purple-400">Reward</p>
+                            <p className="text-sm text-purple-600 dark:text-purple-300">
+                              {selectedActivity.rewardValue}
+                              {selectedActivity.rewardType === 'PERCENTAGE' ? '%' : ' HP'} on successful completion
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      <Separator />
+
+                      {/* Self-declaration section */}
+                      <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+                        <h2 className="text-base font-semibold text-foreground">
+                          Have you completed this activity?
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                          Please confirm only if you have genuinely completed the above activity. False declarations may lead to disciplinary action.
+                        </p>
+                        {acknowledgedActivities[getIdStr(selectedActivity._id)] ? (
+                          <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-medium">
+                            <CheckCircle className="h-5 w-5" />
+                            <span>You have declared this activity as completed.</span>
+                          </div>
+                        ) : (
+                          <div className="flex gap-3">
+                            <Button
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              onClick={() => setShowDeclarationDialog(true)}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Yes, I've completed it
+                            </Button>
+                            <Button variant="outline" disabled>
+                              No, not yet
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="h-full flex items-center justify-center relative z-10">
@@ -2048,6 +2306,7 @@ export default function CoursePage() {
                     </div>
                   </div>
                 )}
+
               </div>
             </SidebarInset>
           </ResizablePanel>

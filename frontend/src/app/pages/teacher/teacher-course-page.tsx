@@ -23,7 +23,8 @@ import { Reorder } from "motion/react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/input"; // Force HMR reload
+
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -44,12 +45,13 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Home, GraduationCap } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-import { useCourseVersionById, useCreateModule, useUpdateModule, useDeleteModule, useCreateSection, useUpdateSection, useDeleteSection, useCreateItem, useUpdateItem, useDeleteItem, useItemsBySectionId, useItemById, useQuizDetails, useQuizAnalytics, useQuizPerformance, useQuizResults, useMoveModule, useMoveSection, useMoveItem, useUpdateCourseItem, useCourseById, useHideModule, useHideSection } from "@/hooks/hooks";
+import { useCourseVersionById, useCreateModule, useUpdateModule, useDeleteModule, useCreateSection, useUpdateSection, useDeleteSection, useCreateItem, useUpdateItem, useDeleteItem, useItemsBySectionId, useItemById, useQuizDetails, useQuizAnalytics, useQuizPerformance, useQuizResults, useMoveModule, useMoveSection, useMoveItem, useUpdateCourseItem, useCourseById, useHideModule, useHideSection, useActivitiesForTeacher, useDeleteActivity, useUpdateActivity } from "@/hooks/hooks";
 import { useCourseStore } from "@/store/course-store";
 import VideoModal from "./components/Video-modal";
 import EnhancedQuizEditor from "./components/enhanced-quiz-editor";
 import EnhancedBlogEditor from "./components/enhanced-blog-editor";
 import QuizWizardModal from "./components/quiz-wizard";
+import { AddActivity } from "./components/AddActivity";
 import { useAuthStore } from "@/store/auth-store";
 import { toast } from "sonner";
 import Loader from "@/components/Loader";
@@ -78,11 +80,21 @@ type Mode = "default" | "wizard" | "custom";
 import { logout } from "@/utils/auth";
 import InviteDropdown from "@/components/inviteDropDown";
 import { useQueryClient } from "@tanstack/react-query"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
-import { Pagination } from "@/components/ui/Pagination";
 
+
+// Helper: extract a plain string from a MongoDB _id (handles { $oid: '...' }, ObjectId instances, and plain strings)
+const getIdStr = (id: any): string => {
+  if (!id) return '';
+  if (typeof id === 'string') return id;
+  if (typeof id === 'object') {
+    if (id.$oid) return id.$oid;
+    if (id.toString && typeof id.toString === 'function') {
+      const s = id.toString();
+      if (s !== '[object Object]') return s;
+    }
+  }
+  return String(id);
+};
 
 // ? Icons per item type
 const getItemIcon = (type: string) => {
@@ -268,14 +280,20 @@ function TeacherCourseContent() {
     return () => clearInterval(interval);
   }, [currentTextIndex, aiMessages]);
 
+  // Fetch activities for the course version
+  const { data: activitiesData, isLoading: isActivitiesLoading, refetch: refetchActivities } = useActivitiesForTeacher(versionId || "");
+  const activities = (activitiesData as any)?.activities || (Array.isArray(activitiesData) ? activitiesData : []);
+  const { mutateAsync: deleteActivityAsync, isPending: isDeletingActivity } = useDeleteActivity();
+  const { mutateAsync: updateActivityAsync, isPending: isUpdatingActivity } = useUpdateActivity();
+
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [autoSelectSectionsToLoad, setAutoSelectSectionsToLoad] = useState<Array<{ moduleId: string, sectionId: string }>>([]);
   const [autoSelectCurrentIndex, setAutoSelectCurrentIndex] = useState(0);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [selectedEntity, setSelectedEntity] = useState<{
-    type: "module" | "section" | "item";
+    type: "module" | "section" | "item" | "add_activity" | "activity";
     data: any;
-    parentIds?: { moduleId: string; sectionId?: string; itemsGroupId?: string };
+    parentIds?: { moduleId: string; sectionId?: string; itemsGroupId?: string } | null;
   } | null>(null);
   const [isEditingItem, setIsEditingItem] = useState(false);
 
@@ -1615,8 +1633,8 @@ function TeacherCourseContent() {
                 <Separator className="opacity-50" />
               </SidebarHeader>
 
-              <SidebarContent
-                className="bg-card/50 pl-2"
+            <SidebarContent
+              className="bg-card/50 pl-2"
 
               >
                 <ScrollArea className="flex-1">
@@ -1702,44 +1720,44 @@ function TeacherCourseContent() {
                                       }}
                                     >
 
-                                      <div
-                                        data-slot="sidebar-menu-sub-item"
-                                        data-sidebar="menu-sub-item"
-                                        className="group/menu-sub-item relative"
+                                    <div
+                                      data-slot="sidebar-menu-sub-item"
+                                      data-sidebar="menu-sub-item"
+                                      className="group/menu-sub-item relative"
+                                    >
+                                      <SidebarMenuSubButton
+                                        onClick={() => {
+                                          setMode("default");
+                                          toggleSection(module.moduleId, section.sectionId);
+                                          setSelectedEntity({
+                                            type: "section",
+                                            data: section,
+                                            parentIds: { moduleId: module.moduleId },
+                                          });
+                                          setIsEditingSection(false);
+                                          setOriginalSectionData({
+                                            name: section.name,
+                                            description: section.description || ""
+                                          });
+                                        }}
                                       >
-                                        <SidebarMenuSubButton
-                                          onClick={() => {
-                                            setMode("default");
-                                            toggleSection(module.moduleId, section.sectionId);
-                                            setSelectedEntity({
-                                              type: "section",
-                                              data: section,
-                                              parentIds: { moduleId: module.moduleId },
-                                            });
-                                            setIsEditingSection(false);
-                                            setOriginalSectionData({
-                                              name: section.name,
-                                              description: section.description || ""
-                                            });
-                                          }}
-                                        >
-                                          <ChevronRight
-                                            className={`h-3 w-3 transition-transform ${expandedSections[section.sectionId] ? "rotate-90" : ""
-                                              }`}
-                                          />
-                                          <span className="ml-2 truncate  max-w-[25ch] truncate block" title={section.name}
-                                          >{section.name} </span>
-                                        </SidebarMenuSubButton>
-                                        <Button className="absolute top-0 right-0" size="icon" variant="ghost" onClick={(e) => handleHideSection(module.moduleId, section.sectionId, !section.isHidden)} disabled={module.isHidden || hidingSectionId === section.sectionId}>
-                                          {hidingSectionId === section.sectionId ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                          ) : !section.isHidden ? (
-                                            <Eye className="h-4 w-4" />
-                                          ) : (
-                                            <EyeOff className="h-4 w-4" />
-                                          )}
-                                          <span className="sr-only">Hide Section</span>
-                                        </Button>
+                                        <ChevronRight
+                                          className={`h-3 w-3 transition-transform ${expandedSections[section.sectionId] ? "rotate-90" : ""
+                                            }`}
+                                        />
+                                        <span className="ml-2 truncate  max-w-[25ch] truncate block" title={section.name}
+                                        >{section.name} </span>
+                                      </SidebarMenuSubButton>
+                                      <Button className="absolute top-0 right-0" size="icon" variant="ghost" onClick={(e) => handleHideSection(module.moduleId, section.sectionId, !section.isHidden)} disabled={module.isHidden || hidingSectionId === section.sectionId}>
+                                        {hidingSectionId === section.sectionId ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : !section.isHidden ? (
+                                          <Eye className="h-4 w-4" />
+                                        ) : (
+                                          <EyeOff className="h-4 w-4" />
+                                        )}
+                                        <span className="sr-only">Hide Section</span>
+                                      </Button>
 
                                         {expandedSections[section.sectionId] && (
                                           <Reorder.Group
@@ -1766,464 +1784,511 @@ function TeacherCourseContent() {
                                                     whileDrag={{ scale: 1.02 }}
                                                     onDragEnd={() => {
 
-                                                      setSectionItems((prev) => {
-                                                        const items = pendingOrderItems.current[section.sectionId] || prev[section.sectionId];
+                                                    setSectionItems((prev) => {
+                                                      const items = pendingOrderItems.current[section.sectionId] || prev[section.sectionId];
 
-                                                        // Sort by LexoRank-compatible `order` string
-                                                        const sortedItems = [...items].sort((a, b) => a.order.localeCompare(b.order));
+                                                      // Sort by LexoRank-compatible `order` string
+                                                      const sortedItems = [...items].sort((a, b) => a.order.localeCompare(b.order));
 
-                                                        return {
-                                                          ...prev,
-                                                          [section.sectionId]: sortedItems
-                                                        };
+                                                      return {
+                                                        ...prev,
+                                                        [section.sectionId]: sortedItems
+                                                      };
+                                                    });
+
+                                                    handleMoveItem(module.moduleId, section.sectionId, item._id, versionId);
+                                                  }}
+                                                >
+                                                  <SidebarMenuSubItem key={item._id}>
+                                                    <SidebarMenuSubButton
+                                                      className={`justify-start ${selectedItem.name === getItemLabel({
+                                                        itemId: item._id,
+                                                        itemType: item.type,
+                                                        sectionItems,
+                                                        sectionId: section.sectionId
+                                                      }) && selectedItem.id == item._id
+                                                        ? "bg-zinc-600 text-gray-200"
+                                                        : "bg-transparent transition-none"
+                                                        }`}
+                                                      onClick={async () => {
+                                                        await handleinvalidateItemQueries();
+                                                        setMode("default");
+                                                        const label = getItemLabel({
+                                                          itemId: item._id,
+                                                          itemType: item.type,
+                                                          sectionItems,
+                                                          sectionId: section.sectionId
+                                                        });
+
+                                                        setSelectedItem({ id: item._id, name: label });
+
+                                                        // Patch: For PROJECT, ensure name/description are always present at root
+                                                        let patchedItem = item;
+                                                        if (item.type === 'PROJECT') {
+                                                          const details = item.details || {};
+                                                          const name = (details.name && details.name.trim()) ? details.name : (item.name || '');
+                                                          const description = (details.description && details.description.trim()) ? details.description : (item.description || '');
+                                                          patchedItem = {
+                                                            ...item,
+                                                            name,
+                                                            description
+                                                          };
+                                                        }
+                                                        setSelectedEntity({
+                                                          type: "item",
+                                                          data: patchedItem,
+                                                          parentIds: {
+                                                            moduleId: module.moduleId,
+                                                            sectionId: section.sectionId,
+                                                            itemsGroupId: section.itemsGroupId,
+                                                          },
+                                                        });
+
+                                                        if (checkScreenSize() && (item.type === 'VIDEO' || item.type === 'QUIZ' || item.type === 'BLOG')) {
+                                                          setOpenMobile(false);
+                                                          setOpen(false);
+                                                        }
+                                                      }
+                                                      }
+                                                    >
+                                                      {getItemIcon(item.type)}
+                                                      <span className={`ml-1 text-xs ${selectedItem.name === getItemLabel({
+                                                        itemId: item._id,
+                                                        itemType: item.type,
+                                                        sectionItems,
+                                                        sectionId: section.sectionId
+                                                      }) && selectedItem.id == item._id
+                                                        ? "text-gray-200"
+                                                        : "text-muted-foreground"
+                                                        }`}>
+                                                        {getItemLabel({
+                                                          itemId: item._id,
+                                                          itemType: item.type,
+                                                          sectionItems,
+                                                          sectionId: section.sectionId
+                                                        })}
+                                                      </span>
+                                                    </SidebarMenuSubButton>
+                                                    <Button className="absolute  top-0 right-0" size="icon" variant="ghost" onClick={(e) => handleHideItem(item._id, !item.isHidden)} disabled={section.isHidden || module.isHidden || hidingItemId === item._id}>
+                                                      {hidingItemId === item._id ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                      ) : !item.isHidden ? (
+                                                        <Eye className={`h-4 w-4 ${selectedItem.id == item._id
+                                                          ? "text-gray-200"
+                                                          : "text-muted-foreground"}`} />
+                                                      ) : (
+                                                        <EyeOff className={`h-4 w-4 ${selectedItem.id == item._id
+                                                          ? "text-gray-200"
+                                                          : "text-muted-foreground"}`} />
+                                                      )}
+                                                      <span className="sr-only">Hide Item</span>
+                                                    </Button>
+                                                  </SidebarMenuSubItem>
+                                                </Reorder.Item>
+                                              ))}
+                                            <div className="ml-6 mt-2">
+
+                                              <select
+
+                                                className="text-xs border rounded px-2 py-1 bg-background text-foreground"
+
+                                                defaultValue=""
+
+                                                disabled={module.isHidden || section.isHidden}
+
+                                                onChange={(e) => {
+
+                                                  const type = e.target.value;
+
+                                                  if (type) {
+
+                                                    if (type === "VIDEO") {
+
+                                                      setShowAddVideoModal({
+
+                                                        moduleId: module.moduleId,
+
+                                                        sectionId: section.sectionId,
+
                                                       });
 
-                                                      handleMoveItem(module.moduleId, section.sectionId, item._id, versionId);
-                                                    }}
-                                                  >
-                                                    <SidebarMenuSubItem key={item._id}>
-                                                      <SidebarMenuSubButton
-                                                        className={`justify-start ${selectedItem.name === getItemLabel({
-                                                          itemId: item._id,
-                                                          itemType: item.type,
-                                                          sectionItems,
-                                                          sectionId: section.sectionId
-                                                        }) && selectedItem.id == item._id
-                                                          ? "bg-zinc-600 text-gray-200"
-                                                          : "bg-transparent transition-none"
-                                                          }`}
-                                                        onClick={async () => {
-                                                          await handleinvalidateItemQueries();
-                                                          setMode("default");
-                                                          const label = getItemLabel({
-                                                            itemId: item._id,
-                                                            itemType: item.type,
-                                                            sectionItems,
-                                                            sectionId: section.sectionId
-                                                          });
+                                                    } else if (type === "quiz") {
 
-                                                          setSelectedItem({ id: item._id, name: label });
+                                                      setQuizModuleId(module.moduleId);
 
-                                                          // Patch: For PROJECT, ensure name/description are always present at root
-                                                          let patchedItem = item;
-                                                          if (item.type === 'PROJECT') {
-                                                            const details = item.details || {};
-                                                            const name = (details.name && details.name.trim()) ? details.name : (item.name || '');
-                                                            const description = (details.description && details.description.trim()) ? details.description : (item.description || '');
-                                                            patchedItem = {
-                                                              ...item,
-                                                              name,
-                                                              description
-                                                            };
-                                                          }
-                                                          setSelectedEntity({
-                                                            type: "item",
-                                                            data: patchedItem,
-                                                            parentIds: {
-                                                              moduleId: module.moduleId,
-                                                              sectionId: section.sectionId,
-                                                              itemsGroupId: section.itemsGroupId,
-                                                            },
-                                                          });
+                                                      setQuizSectionId(section.sectionId);
 
-                                                          if (checkScreenSize() && (item.type === 'VIDEO' || item.type === 'QUIZ' || item.type === 'BLOG')) {
-                                                            setOpenMobile(false);
-                                                            setOpen(false);
-                                                          }
-                                                        }
-                                                        }
-                                                      >
-                                                        {getItemIcon(item.type)}
-                                                        <span className={`ml-1 text-xs ${selectedItem.name === getItemLabel({
-                                                          itemId: item._id,
-                                                          itemType: item.type,
-                                                          sectionItems,
-                                                          sectionId: section.sectionId
-                                                        }) && selectedItem.id == item._id
-                                                          ? "text-gray-200"
-                                                          : "text-muted-foreground"
-                                                          }`}>
-                                                          {getItemLabel({
-                                                            itemId: item._id,
-                                                            itemType: item.type,
-                                                            sectionItems,
-                                                            sectionId: section.sectionId
-                                                          })}
-                                                        </span>
-                                                      </SidebarMenuSubButton>
-                                                      <Button className="absolute  top-0 right-0" size="icon" variant="ghost" onClick={(e) => handleHideItem(item._id, !item.isHidden)} disabled={section.isHidden || module.isHidden || hidingItemId === item._id}>
-                                                        {hidingItemId === item._id ? (
-                                                          <Loader2 className="h-4 w-4 animate-spin" />
-                                                        ) : !item.isHidden ? (
-                                                          <Eye className={`h-4 w-4 ${selectedItem.id == item._id
-                                                            ? "text-gray-200"
-                                                            : "text-muted-foreground"}`} />
-                                                        ) : (
-                                                          <EyeOff className={`h-4 w-4 ${selectedItem.id == item._id
-                                                            ? "text-gray-200"
-                                                            : "text-muted-foreground"}`} />
-                                                        )}
-                                                        <span className="sr-only">Hide Item</span>
-                                                      </Button>
-                                                    </SidebarMenuSubItem>
-                                                  </Reorder.Item>
-                                                ))}
-                                              <div className="ml-6 mt-2">
+                                                      // Update course store with current context
 
-                                                <select
+                                                      if (currentCourse) {
 
-                                                  className="text-xs border rounded px-2 py-1 bg-background text-foreground"
+                                                        setCurrentCourse({
 
-                                                  defaultValue=""
-
-                                                  disabled={module.isHidden || section.isHidden}
-
-                                                  onChange={(e) => {
-
-                                                    const type = e.target.value;
-
-                                                    if (type) {
-
-                                                      if (type === "VIDEO") {
-
-                                                        setShowAddVideoModal({
+                                                          ...currentCourse,
 
                                                           moduleId: module.moduleId,
 
-                                                          sectionId: section.sectionId,
+                                                          sectionId: section.sectionId
 
                                                         });
 
-                                                      } else if (type === "quiz") {
+                                                      }
 
-                                                        setQuizModuleId(module.moduleId);
+                                                      setQuizWizardOpen(true);
 
-                                                        setQuizSectionId(section.sectionId);
 
-                                                        // Update course store with current context
+                                                    }
+                                                    else if (type === "project") {
 
-                                                        if (currentCourse) {
-
-                                                          setCurrentCourse({
-
-                                                            ...currentCourse,
-
+                                                      createItemAsync({
+                                                        params: {
+                                                          path: {
+                                                            versionId: versionId!,
                                                             moduleId: module.moduleId,
-
-                                                            sectionId: section.sectionId
-
-                                                          });
-
-                                                        }
-
-                                                        setQuizWizardOpen(true);
-
-
-                                                      }
-                                                      else if (type === "project") {
-
-                                                        createItemAsync({
-                                                          params: {
-                                                            path: {
-                                                              versionId: versionId!,
-                                                              moduleId: module.moduleId,
-                                                              sectionId: section.sectionId,
-                                                            },
+                                                            sectionId: section.sectionId,
                                                           },
-                                                          body: {
-                                                            type: "PROJECT",
-                                                            name: `Project name`,
-                                                            description: `Project description`
-                                                          },
-                                                        })
-                                                          .then((created) => {
-                                                            const newItem = created?.createdItem || created?.item || created?.data || created;
-                                                            const itemsGroupId = created?.itemsGroup?._id || section.itemsGroupId;
+                                                        },
+                                                        body: {
+                                                          type: "PROJECT",
+                                                          name: `Project name`,
+                                                          description: `Project description`
+                                                        },
+                                                      })
+                                                        .then((created) => {
+                                                          const newItem = created?.createdItem || created?.item || created?.data || created;
+                                                          const itemsGroupId = created?.itemsGroup?._id || section.itemsGroupId;
 
-                                                            if (newItem && newItem._id) {
-                                                              setSelectedItem({ id: newItem._id, name: newItem.name });
-                                                              setSelectedEntity({
-                                                                type: "item",
-                                                                data: newItem,
-                                                                parentIds: {
-                                                                  moduleId: module.moduleId,
-                                                                  sectionId: section.sectionId,
-                                                                  itemsGroupId,
-                                                                },
-                                                              });
-                                                            } else {
-                                                              refetchVersion();
-                                                              if (shouldFetchItems) {
-                                                                refetchItems();
-                                                              }
-                                                            }
-                                                          });
-                                                      }
-                                                      else if (type === "feedback") {
-                                                        createItemAsync({
-                                                          params: {
-                                                            path: {
-                                                              versionId: versionId!,
-                                                              moduleId: module.moduleId,
-                                                              sectionId: section.sectionId,
-                                                            },
-                                                          },
-                                                          body: {
-                                                            type: "FEEDBACK",
-                                                            name: "Feedback Form",
-                                                            description: "Submit your feedback about the previous video/quiz",
-                                                            feedbackFormDetails: {
-                                                              jsonSchema: {
-                                                                type: 'object',
-                                                                properties: {
-                                                                  Name: {
-                                                                    type: 'string',
-                                                                    title: 'Name',
-                                                                    minLength: 1,
-                                                                  },
-                                                                  Email: {
-                                                                    type: 'string',
-                                                                    format: 'email',
-                                                                    title: 'Email',
-                                                                  },
-                                                                  Feedback: {
-                                                                    type: 'string',
-                                                                    title: 'Feedback',
-                                                                    minLength: 10
-                                                                  },
-                                                                },
-                                                                required: ['Name', 'Email', 'Feedback'],
+                                                          if (newItem && newItem._id) {
+                                                            setSelectedItem({ id: newItem._id, name: newItem.name });
+                                                            setSelectedEntity({
+                                                              type: "item",
+                                                              data: newItem,
+                                                              parentIds: {
+                                                                moduleId: module.moduleId,
+                                                                sectionId: section.sectionId,
+                                                                itemsGroupId,
                                                               },
-                                                              uiSchema: {
+                                                            });
+                                                          } else {
+                                                            refetchVersion();
+                                                            if (shouldFetchItems) {
+                                                              refetchItems();
+                                                            }
+                                                          }
+                                                        });
+                                                    }
+                                                    else if (type === "feedback") {
+                                                      createItemAsync({
+                                                        params: {
+                                                          path: {
+                                                            versionId: versionId!,
+                                                            moduleId: module.moduleId,
+                                                            sectionId: section.sectionId,
+                                                          },
+                                                        },
+                                                        body: {
+                                                          type: "FEEDBACK",
+                                                          name: "Feedback Form",
+                                                          description: "Submit your feedback about the previous video/quiz",
+                                                          feedbackFormDetails: {
+                                                            jsonSchema: {
+                                                              type: 'object',
+                                                              properties: {
                                                                 Name: {
-                                                                  'ui:placeholder': 'Enter your Name',
+                                                                  type: 'string',
+                                                                  title: 'Name',
+                                                                  minLength: 1,
                                                                 },
                                                                 Email: {
-                                                                  'ui:placeholder': 'Enter your Email',
+                                                                  type: 'string',
+                                                                  format: 'email',
+                                                                  title: 'Email',
                                                                 },
                                                                 Feedback: {
-                                                                  'ui:placeholder': 'Enter your feedback here...',
-                                                                  'ui:widget': 'textarea',
+                                                                  type: 'string',
+                                                                  title: 'Feedback',
+                                                                  minLength: 10
                                                                 },
-                                                              }
+                                                              },
+                                                              required: ['Name', 'Email', 'Feedback'],
                                                             },
+                                                            uiSchema: {
+                                                              Name: {
+                                                                'ui:placeholder': 'Enter your Name',
+                                                              },
+                                                              Email: {
+                                                                'ui:placeholder': 'Enter your Email',
+                                                              },
+                                                              Feedback: {
+                                                                'ui:placeholder': 'Enter your feedback here...',
+                                                                'ui:widget': 'textarea',
+                                                              },
+                                                            }
+                                                          },
+                                                        }
+                                                      })
+                                                        .then((created) => {
+                                                          const newItem = created?.createdItem || created?.item || created?.data || created;
+                                                          const itemsGroupId = created?.itemsGroup?._id || section.itemsGroupId;
+
+                                                          if (newItem && newItem._id) {
+                                                            // Auto-select the newly created feedback form
+                                                            setSelectedItem({ id: newItem._id, name: "Feedback Form 1" });
+                                                            setSelectedEntity({
+                                                              type: "item",
+                                                              data: newItem,
+                                                              parentIds: {
+                                                                moduleId: module.moduleId,
+                                                                sectionId: section.sectionId,
+                                                                itemsGroupId,
+                                                              },
+                                                            });
+                                                          } else {
+                                                            refetchVersion();
+                                                            if (shouldFetchItems) {
+                                                              refetchItems();
+                                                            }
                                                           }
                                                         })
-                                                          .then((created) => {
-                                                            const newItem = created?.createdItem || created?.item || created?.data || created;
-                                                            const itemsGroupId = created?.itemsGroup?._id || section.itemsGroupId;
-
-                                                            if (newItem && newItem._id) {
-                                                              // Auto-select the newly created feedback form
-                                                              setSelectedItem({ id: newItem._id, name: "Feedback Form 1" });
-                                                              setSelectedEntity({
-                                                                type: "item",
-                                                                data: newItem,
-                                                                parentIds: {
-                                                                  moduleId: module.moduleId,
-                                                                  sectionId: section.sectionId,
-                                                                  itemsGroupId,
-                                                                },
-                                                              });
-                                                            } else {
-                                                              refetchVersion();
-                                                              if (shouldFetchItems) {
-                                                                refetchItems();
-                                                              }
-                                                            }
-                                                          })
-                                                          .catch((err) => {
-                                                            toast.error("Failed to create feedback form");
-                                                            console.error(err);
-                                                          });
-                                                      }
-                                                      else if (type === "csv_upload") {
-                                                        setActiveSectionInfo({ moduleId: module.moduleId, sectionId: section.sectionId });
-                                                        setShowCSVUpload(true);
-                                                      }
-                                                      else {
-                                                        setActiveSectionInfo({ moduleId: module.moduleId, sectionId: section.sectionId });
-                                                        handleAddItem(module.moduleId, section.sectionId, type);
-
-                                                      }
-
-                                                      e.target.value = "";
+                                                        .catch((err) => {
+                                                          toast.error("Failed to create feedback form");
+                                                          console.error(err);
+                                                        });
+                                                    }
+                                                    else if (type === "csv_upload") {
+                                                      setActiveSectionInfo({ moduleId: module.moduleId, sectionId: section.sectionId });
+                                                      setShowCSVUpload(true);
+                                                    }
+                                                    else {
+                                                      setActiveSectionInfo({ moduleId: module.moduleId, sectionId: section.sectionId });
+                                                      handleAddItem(module.moduleId, section.sectionId, type);
 
                                                     }
 
-                                                  }}
+                                                    e.target.value = "";
 
+                                                  }
+
+                                                }}
+
+                                              >
+
+                                                <option value="" disabled>Add Item</option>
+
+                                                <option value="article">Article</option>
+
+                                                <option value="VIDEO">Video</option>
+
+                                                <option value="quiz">Quiz</option>
+
+                                                <option value="feedback">Feedback Form</option>
+
+                                                <option
+                                                  value="project"
+                                                  disabled={hasExistingProject}
+                                                  className={hasExistingProject ? 'text-gray-400' : ''}
                                                 >
+                                                  {hasExistingProject ? 'Project (Limit 1 per course)' : 'Project'}
+                                                </option>
+                                                <option value="csv_upload">Upload CSV</option>
 
-                                                  <option value="" disabled>Add Item</option>
+                                              </select>
+                                              <TooltipProvider>
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <DropdownMenu>
+                                                      <DropdownMenuTrigger asChild>
+                                                        <Button
+                                                          type="button"
+                                                          className="inline-flex items-center justify-center px-1.5 py-0 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-semibold text-[10px] gap-0.5 shadow transition-all duration-200 hover:scale-105 hover:shadow-lg hover:from-purple-600 hover:to-indigo-600 focus:outline-none focus:ring-2 focus:ring-purple-400 ml-3"
+                                                          style={{ minWidth: 'unset', height: '1.5rem' }}
+                                                        >
+                                                          <Sparkles className="h-2 w-2" />
+                                                          <span>AI</span>
+                                                        </Button>
+                                                      </DropdownMenuTrigger>
+                                                      <DropdownMenuContent align="start" className="w-40">
+                                                        <DropdownMenuItem
+                                                          className="text-xs cursor-pointer"
+                                                          onClick={() => {
+                                                            setCurrentCourse({
+                                                              courseId,
+                                                              versionId,
+                                                              moduleId: module.moduleId,
+                                                              sectionId: section.sectionId,
+                                                              itemId: null,
+                                                              watchItemId: null,
+                                                            });
+                                                            setMode('custom')
+                                                            // navigate({ to: '/teacher/ai-section' });
+                                                          }}
+                                                        >
+                                                          Custom mode
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                          className="text-xs cursor-pointer"
+                                                          onClick={() => {
+                                                            setCurrentCourse({
+                                                              courseId,
+                                                              versionId,
+                                                              moduleId: module.moduleId,
+                                                              sectionId: section.sectionId,
+                                                              itemId: null,
+                                                              watchItemId: null,
+                                                            });
+                                                            setMode('wizard')
+                                                            // navigate({ to: '/teacher/ai-workflow' });
+                                                          }}
+                                                        >
+                                                          Wizard mode
+                                                        </DropdownMenuItem>
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent side="right" align="center">
+                                                    Generate Section with AI
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              </TooltipProvider>
+                                            </div>
 
-                                                  <option value="article">Article</option>
+                                          </SidebarMenuSub>
+                                        </Reorder.Group>
+                                      )}
+                                    </div>
+                                  </Reorder.Item>
+                                ))}
 
-                                                  <option value="VIDEO">Video</option>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="ml-4 mt-2 w-[220px] h-6 text-xs"
+                                  onClick={() => handleAddSection(module.moduleId)}
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Add Section
+                                </Button>
+                              </SidebarMenuSub>
+                            </Reorder.Group>
+                          )}
+                        </SidebarMenuItem>
+                      ))}
 
-                                                  <option value="quiz">Quiz</option>
+                    {/* Activities List */}
+                    {activities.length > 0 && (
+                      <SidebarMenuItem>
+                        <SidebarMenuButton className="font-semibold text-primary/80 uppercase tracking-wider text-[10px] mt-4 mb-2 px-2 hover:bg-transparent cursor-default">
+                          Activities
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )}
+                    {isActivitiesLoading ? (
+                      <div className="flex justify-center p-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+                    ) : (
+                      activities.map((activity: any) => (
+                        <SidebarMenuItem key={`activity-${getIdStr(activity._id)}`}>
+                          <SidebarMenuButton
+                            onClick={() => {
+                              setSelectedEntity({ type: "activity" as any, data: activity });
+                              setSelectedItem({ id: getIdStr(activity._id), name: activity.title });
+                              setMode("default");
+                            }}
+                            isActive={selectedItem.id === getIdStr(activity._id)}
+                            className={`w-full justify-between group transition-all duration-200 ${selectedItem.id === getIdStr(activity._id)
+                              ? "bg-accent text-accent-foreground font-medium shadow-sm"
+                              : "hover:bg-accent/50 text-muted-foreground hover:text-foreground"
+                              }`}
+                          >
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <div className={`p-1 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400`}>
+                                <FileText className="h-3.5 w-3.5" />
+                              </div>
+                              <span className="truncate text-sm">{activity.title}</span>
+                            </div>
+                            <Badge variant={activity.isMandatory ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-4">
+                              {activity.isMandatory ? 'Req' : 'Opt'}
+                            </Badge>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ))
+                    )}
 
-                                                  <option value="feedback">Feedback Form</option>
+                    <div className="px-2 pt-3 flex flex-col gap-2 border-t mt-4 border-border/40">
+                      <Button size="sm" className="w-[250px] text-xs" onClick={handleAddModule}>
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add Module
+                      </Button>
+                      <Button size="sm" variant="secondary" className="w-[250px] text-xs" onClick={() => {
+                        setSelectedItem({ id: 'add-activity', name: 'Add Activity' });
+                        setSelectedEntity({ type: 'add_activity', data: null, parentIds: null });
+                        setMode('default');
+                      }}>
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add Activity
+                      </Button>
+                    </div>
+                  </SidebarMenu>
+                </Reorder.Group>
 
-                                                  <option
-                                                    value="project"
-                                                    disabled={hasExistingProject}
-                                                    className={hasExistingProject ? 'text-gray-400' : ''}
-                                                  >
-                                                    {hasExistingProject ? 'Project (Limit 1 per course)' : 'Project'}
-                                                  </option>
-                                                  <option value="csv_upload">Upload CSV</option>
 
-                                                </select>
-                                                <TooltipProvider>
-                                                  <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                      <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                          <Button
-                                                            type="button"
-                                                            className="inline-flex items-center justify-center px-1.5 py-0 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-semibold text-[10px] gap-0.5 shadow transition-all duration-200 hover:scale-105 hover:shadow-lg hover:from-purple-600 hover:to-indigo-600 focus:outline-none focus:ring-2 focus:ring-purple-400 ml-3"
-                                                            style={{ minWidth: 'unset', height: '1.5rem' }}
-                                                          >
-                                                            <Sparkles className="h-2 w-2" />
-                                                            <span>AI</span>
-                                                          </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="start" className="w-40">
-                                                          <DropdownMenuItem
-                                                            className="text-xs cursor-pointer"
-                                                            onClick={() => {
-                                                              setCurrentCourse({
-                                                                courseId,
-                                                                versionId,
-                                                                moduleId: module.moduleId,
-                                                                sectionId: section.sectionId,
-                                                                itemId: null,
-                                                                watchItemId: null,
-                                                              });
-                                                              setMode('custom')
-                                                              // navigate({ to: '/teacher/ai-section' });
-                                                            }}
-                                                          >
-                                                            Custom mode
-                                                          </DropdownMenuItem>
-                                                          <DropdownMenuItem
-                                                            className="text-xs cursor-pointer"
-                                                            onClick={() => {
-                                                              setCurrentCourse({
-                                                                courseId,
-                                                                versionId,
-                                                                moduleId: module.moduleId,
-                                                                sectionId: section.sectionId,
-                                                                itemId: null,
-                                                                watchItemId: null,
-                                                              });
-                                                              setMode('wizard')
-                                                              // navigate({ to: '/teacher/ai-workflow' });
-                                                            }}
-                                                          >
-                                                            Wizard mode
-                                                          </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                      </DropdownMenu>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent side="right" align="center">
-                                                      Generate Section with AI
-                                                    </TooltipContent>
-                                                  </Tooltip>
-                                                </TooltipProvider>
-                                              </div>
-
-                                            </SidebarMenuSub>
-                                          </Reorder.Group>
-                                        )}
-                                      </div>
-                                    </Reorder.Item>
-                                  ))}
-
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="ml-4 mt-2 w-[220px] h-6 text-xs"
-                                    onClick={() => handleAddSection(module.moduleId)}
-                                  >
-                                    <Plus className="h-3 w-3 mr-1" />
-                                    Add Section
-                                  </Button>
-                                </SidebarMenuSub>
-                              </Reorder.Group>
-                            )}
-                          </SidebarMenuItem>
-                        ))}
-
-                      <div className="px-2 pt-3">
-                        <Button size="sm" className="w-[250px]  text-xs" onClick={handleAddModule}>
-                          <Plus className="h-3 w-3 mr-1" />
-                          Add Module
-                        </Button>
+              </ScrollArea>
+            </SidebarContent>
+            <SidebarFooter className="border-t border-border/40 bg-gradient-to-t from-sidebar/80 to-sidebar/60">
+              <SidebarMenu className="space-y-1 pl-2 py-3">
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    className="h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
+                  >
+                    <Link to="/teacher" className="flex items-center gap-3">
+                      <div className="p-1 rounded-md bg-accent/15">
+                        <Home className="h-4 w-4 text-accent-foreground" />
                       </div>
-                    </SidebarMenu>
-                  </Reorder.Group>
+                      <span className="text-sm font-medium">Dashboard</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    className="h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
+                  >
+                    <Link to="/teacher" className="flex items-center gap-3">
+                      <div className="p-1 rounded-md bg-accent/15">
+                        <GraduationCap className="h-4 w-4 text-accent-foreground" />
+                      </div>
+                      <span className="text-sm font-medium">Courses</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
 
-                </ScrollArea>
-              </SidebarContent>
-              <SidebarFooter className="border-t border-border/40 bg-gradient-to-t from-sidebar/80 to-sidebar/60">
-                <SidebarMenu className="space-y-1 pl-2 py-3">
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      className="h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
-                    >
-                      <Link to="/teacher" className="flex items-center gap-3">
-                        <div className="p-1 rounded-md bg-accent/15">
-                          <Home className="h-4 w-4 text-accent-foreground" />
-                        </div>
-                        <span className="text-sm font-medium">Dashboard</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                <Separator className="my-2 opacity-50" />
 
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      className="h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
-                    >
-                      <Link to="/teacher" className="flex items-center gap-3">
-                        <div className="p-1 rounded-md bg-accent/15">
-                          <GraduationCap className="h-4 w-4 text-accent-foreground" />
-                        </div>
-                        <span className="text-sm font-medium">Courses</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-
-                  <Separator className="my-2 opacity-50" />
-
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      className="h-10 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
-                    >
-                      <Link to="/teacher/profile" className="flex items-center gap-3">
-                        <Avatar className="h-6 w-6 border border-border/20">
-                          <AvatarImage src={user?.avatar} alt={user?.name} />
-                          <AvatarFallback className="bg-gradient-to-br from-primary/15 to-primary/5 text-primary font-bold text-xs">
-                            {user?.name?.charAt(0).toUpperCase() || 'U'}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 text-left min-w-0">
-                          <div className="text-sm font-medium truncate" title={user?.name || 'Profile'}>{user?.name || 'Profile'}</div>
-                          <div className="text-xs text-muted-foreground">View Profile</div>
-                        </div>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarFooter>
-            </Sidebar>
-          </div>
-        </SidebarResizablePanel>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    className="h-10 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
+                  >
+                    <Link to="/teacher/profile" className="flex items-center gap-3">
+                      <Avatar className="h-6 w-6 border border-border/20">
+                        <AvatarImage src={user?.avatar} alt={user?.name} />
+                        <AvatarFallback className="bg-gradient-to-br from-primary/15 to-primary/5 text-primary font-bold text-xs">
+                          {user?.name?.charAt(0).toUpperCase() || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 text-left min-w-0">
+                        <div className="text-sm font-medium truncate" title={user?.name || 'Profile'}>{user?.name || 'Profile'}</div>
+                        <div className="text-xs text-muted-foreground">View Profile</div>
+                      </div>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarFooter>
+          </Sidebar>
+        </div>
+      </SidebarResizablePanel>
       {/* )} */}
 
       {/* <ResizablePanel
@@ -2261,7 +2326,7 @@ function TeacherCourseContent() {
                   onClick={() => setIsDesktopSidebarVisible((p) => !p)}
                   className="hidden md:inline-flex"
                 > */}
-                  <SidebarTrigger/>
+                <SidebarTrigger />
                 {/* </Button> */}
 
                 <Separator orientation="vertical" className="mx-2 h-4" />
@@ -2348,7 +2413,7 @@ function TeacherCourseContent() {
                   onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
                   className="md:hidden shrink-0"
                 > */}
-                  <span className="sr-only">Toggle Menu</span>
+                <span className="sr-only">Toggle Menu</span>
                 {/* </Button> */}
 
                 <div className="flex items-center gap-2 bg-muted/40 px-3 py-1.5 rounded-lg border min-w-0 flex-1 sm:flex-none sm:min-w-[200px]">
@@ -2382,6 +2447,130 @@ function TeacherCourseContent() {
               <AiWorkflow />
             ) : mode === "custom" ? (
               <AISectionPage />
+            ) : selectedEntity?.type === "add_activity" ? (
+              <AddActivity
+                courseId={courseId!}
+                versionId={versionId!}
+                onSuccess={() => {
+                  setSelectedItem({ id: '', name: '' });
+                  setSelectedEntity(null);
+                  refetchActivities();
+                }}
+                onCancel={() => {
+                  setSelectedItem({ id: '', name: '' });
+                  setSelectedEntity(null);
+                }}
+              />
+            ) : selectedEntity?.type === "activity" && selectedEntity.data ? (
+              <div className="bg-white dark:bg-background rounded-2xl shadow-lg border border-slate-200 dark:border-gray-700 overflow-hidden">
+                <div className="p-4 md:p-6 lg:p-8">
+                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-border/40">
+                    <div>
+                      <h2 className="text-xl font-bold flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-orange-500" />
+                        {selectedEntity.data.title}
+                      </h2>
+                      <div className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
+                        <Badge variant="outline">{selectedEntity.data.activityType?.replace(/_/g, ' ') || 'Activity'}</Badge>
+                        <span>•</span>
+                        <span>{selectedEntity.data.isMandatory ? 'Required' : 'Optional'}</span>
+                        <span>•</span>
+                        <Badge
+                          className={selectedEntity.data.status === 'PUBLISHED'
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200'
+                            : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200'
+                          }
+                        >
+                          {selectedEntity.data.status || 'DRAFT'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {selectedEntity.data.status !== 'PUBLISHED' && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                          disabled={isUpdatingActivity}
+                          onClick={async () => {
+                            try {
+                              await updateActivityAsync({ activityId: getIdStr(selectedEntity.data._id), data: { status: 'PUBLISHED' } });
+                              toast.success("Activity published! Students can now see it.");
+                              refetchActivities();
+                              setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, status: 'PUBLISHED' } } : null);
+                            } catch (error: any) {
+                              toast.error(error.message || "Failed to publish activity");
+                            }
+                          }}
+                        >
+                          {isUpdatingActivity ? '...' : 'Publish'}
+                        </Button>
+                      )}
+                      <Button variant="destructive" size="sm"
+                        disabled={isDeletingActivity}
+                        onClick={async () => {
+                          if (confirm(`Are you sure you want to delete activity "${selectedEntity.data.title}"?`)) {
+                            try {
+                              await deleteActivityAsync(getIdStr(selectedEntity.data._id));
+                              toast.success("Activity deleted successfully");
+                              refetchActivities();
+                              setSelectedEntity(null);
+                              setSelectedItem({ id: '', name: '' });
+                            } catch (error: any) {
+                              toast.error(error.message || "Failed to delete activity");
+                            }
+                          }
+                        }}
+                      >
+                        {isDeletingActivity ? '...' : 'Delete'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-sm font-semibold mb-2">Description</h3>
+                      <div className="bg-muted/30 p-4 rounded-lg text-sm whitespace-pre-wrap">
+                        {selectedEntity.data.description || 'No description provided.'}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {selectedEntity.data.deadline && (
+                        <div className="p-4 rounded-lg border bg-card">
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Deadline</h4>
+                          <p className="text-sm">{new Date(selectedEntity.data.deadline).toLocaleString()}</p>
+                        </div>
+                      )}
+
+                      {selectedEntity.data.rewardType && selectedEntity.data.rewardValue !== undefined && (
+                        <div className="p-4 rounded-lg border bg-card">
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Reward</h4>
+                          <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                            +{selectedEntity.data.rewardValue} {selectedEntity.data.rewardType}
+                          </p>
+                        </div>
+                      )}
+
+                      {selectedEntity.data.isMandatory && selectedEntity.data.penaltyType && selectedEntity.data.penaltyValue !== undefined && (
+                        <div className="p-4 rounded-lg border bg-card/50 border-destructive/20">
+                          <h4 className="text-xs font-semibold text-destructive/80 uppercase tracking-wider mb-1">Penalty</h4>
+                          <p className="text-sm font-medium text-destructive">
+                            -{selectedEntity.data.penaltyValue} {selectedEntity.data.penaltyType}
+                          </p>
+                        </div>
+                      )}
+
+                      {selectedEntity.data.submissionMode && (
+                        <div className="p-4 rounded-lg border bg-card">
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Submission Mode</h4>
+                          <p className="text-sm capitalize">{selectedEntity.data.submissionMode?.replace(/_/g, ' ')}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : (
               selectedEntity ? (
                 <div className="bg-white dark:bg-background rounded-2xl shadow-lg border border-slate-200 dark:border-gray-700 overflow-hidden">
@@ -3139,7 +3328,7 @@ function TeacherCourseContent() {
                           onDelete={() => {
                             deleteItemAsync({
                               params: { path: { itemsGroupId: selectedEntity.parentIds?.itemsGroupId || "", itemId: selectedEntity.data._id } }
-                            }).then((res) => {
+                            }).then(() => {
                               refetchVersion();
                               refetchItems();
                             });

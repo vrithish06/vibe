@@ -11,6 +11,7 @@ import { CourseRepository } from '#shared/database/providers/mongo/repositories/
 import { FirebaseAuthService } from './modules/auth/services/FirebaseAuthService.js';
 import { ProgressService } from './modules/users/services/ProgressService.js';
 import { EnrollmentService } from './modules/users/services/EnrollmentService.js';
+import { ActivityRepository } from '#shared/database/providers/mongo/repositories/ActivityRepository.js';
 import { HealthPointsRepository } from '#shared/database/providers/mongo/repositories/HealthPointsRepository.js';
 
 
@@ -38,6 +39,7 @@ export const sharedContainerModule = new ContainerModule(options => {
     .inSingletonScope();
 
   options.bind(HealthPointsRepository).toSelf().inSingletonScope();
+  options.bind(ActivityRepository).toSelf().inSingletonScope();
 
   // Other
   options.bind(HttpErrorHandler).toSelf().inSingletonScope();

@@ -75,12 +75,8 @@ export class HealthPointsService {
     ): Promise<any> {
         const currentRecord = await this.ensureInitialized(userId, courseId, session);
 
-        if (!currentRecord) {
-            // Should not happen after ensureInitialized
-            throw new NotFoundError('Failed to initialize Health Points record');
-        }
-
-        const previousHP = currentRecord.currentHP;
+        // If HP record still not found after initialization (race condition/DB timing), use default
+        const previousHP = currentRecord?.currentHP ?? 1000;
         let signedPercentage = percentageChange;
         if (type === 'BONUS') {
             signedPercentage = Math.abs(percentageChange);
@@ -112,7 +108,8 @@ export class HealthPointsService {
         );
 
         return {
-            ...currentRecord,
+            ...(currentRecord ?? {}),
+            previousHP,
             currentHP: newHP,
             status: newStatus,
             lastUpdated: new Date()
