@@ -45,8 +45,7 @@ export default function StudentHealthPoints({ courseId }: { courseId: string }) 
         return (
             <div className="flex-1 w-full bg-background/50 h-full p-6 flex flex-col items-center justify-center text-center">
                 <ServerCrash className="h-16 w-16 text-muted-foreground mb-4" />
-                <h3 className="text-xl font-bold mb-2">Unavailable</h3>
-                <p className="text-muted-foreground max-w-sm">Failed to load your health points for this course.</p>
+                <p className="text-muted-foreground max-w-sm">Failed to load your brownie points for this course.</p>
             </div>
         );
     }
@@ -62,7 +61,7 @@ export default function StudentHealthPoints({ courseId }: { courseId: string }) 
                             <Activity className="h-8 w-8 text-primary" />
                         </div>
                         <div>
-                            <h1 className="text-3xl font-bold text-foreground drop-shadow-sm">Health Points</h1>
+                            <h1 className="text-3xl font-bold text-foreground drop-shadow-sm">Brownie Points</h1>
                             <p className="text-muted-foreground mt-1 text-sm">Track your standing and engagement in this course.</p>
                         </div>
                     </div>
@@ -72,7 +71,7 @@ export default function StudentHealthPoints({ courseId }: { courseId: string }) 
                     <Card className="border-border/50 shadow-md">
                         <CardHeader className="pb-4">
                             <CardTitle className="text-lg flex items-center gap-2">
-                                <ShieldCheck className="w-5 h-5 text-green-500" /> Your Health Score
+                                <ShieldCheck className="w-5 h-5 text-green-500" /> Your Brownie Points Score
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
@@ -81,7 +80,7 @@ export default function StudentHealthPoints({ courseId }: { courseId: string }) 
                                     <span className="text-5xl font-black text-primary drop-shadow-sm">
                                         {healthPoints ? Math.round(healthPoints.currentHP) : 100}
                                     </span>
-                                    <span className="text-sm font-semibold text-muted-foreground mb-1">HP</span>
+                                    <span className="text-sm font-semibold text-muted-foreground mb-1">BP</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <StatusBadge status={healthPoints?.status || 'healthy'} />
@@ -105,7 +104,7 @@ export default function StudentHealthPoints({ courseId }: { courseId: string }) 
                                     <span className="text-5xl font-black drop-shadow-sm opacity-90">
                                         {Math.round(averageHP)}
                                     </span>
-                                    <span className="text-sm font-semibold text-muted-foreground mb-1">HP</span>
+                                    <span className="text-sm font-semibold text-muted-foreground mb-1">BP</span>
                                 </div>
                                 <p className="text-sm text-muted-foreground mt-2">
                                     Compare your performance with the overall class average standing.
@@ -122,7 +121,7 @@ export default function StudentHealthPoints({ courseId }: { courseId: string }) 
                             Activity Log
                         </CardTitle>
                         <CardDescription>
-                            Recent events that affected your Health Points.
+                            Recent events that affected your Brownie Points.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
@@ -171,6 +170,6 @@ export default function StudentHealthPoints({ courseId }: { courseId: string }) 
                     </CardContent>
                 </Card>
             </div>
-        </div>
+        </div >
     );
 }

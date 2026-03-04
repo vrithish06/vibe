@@ -41,7 +41,7 @@ import {
   X,
   CircleCheckIcon,
   Headphones,
-  ExternalLink, Menu
+  ExternalLink, Menu, Activity
 } from "lucide-react";
 import FloatingVideo, { FloatingVideoPlaceholder } from "@/components/floating-video";
 import type { itemref } from "@/types/course.types";
@@ -56,6 +56,7 @@ import { registerStream, unRegisterStream } from "@/lib/MediaRegistry";
 import { useModuleProgress } from "@/hooks/hooks";
 import { isMobile } from "react-device-detect";
 import MobileFallbackScreen from "@/components/MobileFallbackScreen";
+import StudentHealthPoints from "./components/StudentHealthPoints";
 
 // Helper: extract a plain string from a MongoDB _id ({ $oid: '...' }, ObjectId instances, or plain string)
 const getIdStr = (id: any): string => {
@@ -202,6 +203,8 @@ export default function CoursePage() {
   const [readyToDetect, setReadyToDetect] = useState(false);
   // State for sidebar visibility
   const [isDesktopSidebarVisible, setIsDesktopSidebarVisible] = useState(true);
+  const [showBrowniePoints, setShowBrowniePoints] = useState(false);
+  const [isActivitiesExpanded, setIsActivitiesExpanded] = useState(true);
 
   // ---- Activities ----
   const { data: activitiesData, isLoading: activitiesLoading } = useActivitiesForStudent(VERSION_ID);
@@ -768,6 +771,7 @@ export default function CoursePage() {
 
         // Update store
         updateCourseNavigation(moduleId, sectionId, itemId);
+        setShowBrowniePoints(false); // Hide brownie points when an item is clicked
         setIsNavigatingToNext(false);
 
       } catch (error) {
@@ -1684,58 +1688,67 @@ export default function CoursePage() {
                     {/* ── Activities ── */}
                     {(activitiesLoading || activities.length > 0) && (
                       <div className="px-2 pt-4 pb-2">
-                        <div className="flex items-center gap-2 mb-2 px-1">
+                        <button
+                          onClick={() => setIsActivitiesExpanded(!isActivitiesExpanded)}
+                          className="flex items-center w-full gap-2 mb-2 px-1 hover:bg-accent/50 rounded p-1 transition-colors"
+                        >
+                          <ChevronRight
+                            className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isActivitiesExpanded ? "rotate-90" : ""}`}
+                          />
                           <FileText className="h-3.5 w-3.5 text-orange-500" />
                           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                             Activities
                           </span>
-                        </div>
-                        {activitiesLoading ? (
-                          <div className="flex justify-center py-3">
-                            <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-1">
-                            {activities.map((activity: any) => {
-                              const actId = getIdStr(activity._id);
-                              const isSelected = selectedActivityId === actId;
-                              const isDone = acknowledgedActivities[actId];
-                              const deadlineDate = activity.deadline ? new Date(activity.deadline) : null;
-                              const isOverdue = deadlineDate && deadlineDate < new Date();
-                              return (
-                                <button
-                                  key={actId}
-                                  onClick={() => {
-                                    setSelectedActivityId(actId);
-                                    // Clear any selected course item and hide current item view
-                                    setSelectedItemId(null);
-                                    setCurrentItem(null);
-                                  }}
-                                  className={`w-full text-left rounded-lg px-3 py-2 transition-all duration-150 border ${isSelected
-                                    ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700'
-                                    : 'bg-card hover:bg-accent/40 border-transparent hover:border-border/40'
-                                    }`}
-                                >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <span className="text-xs font-medium leading-snug truncate flex-1">
-                                      {activity.title}
-                                    </span>
-                                    {isDone ? (
-                                      <CheckCircle className="h-3.5 w-3.5 text-green-500 flex-shrink-0 mt-0.5" />
-                                    ) : (
-                                      <div className={`h-1.5 w-1.5 rounded-full mt-1.5 flex-shrink-0 ${isOverdue ? 'bg-red-500' : 'bg-orange-400'}`} />
-                                    )}
-                                  </div>
-                                  {deadlineDate && (
-                                    <div className={`text-[10px] mt-0.5 ${isOverdue ? 'text-red-500' : 'text-muted-foreground'}`}>
-                                      {isOverdue ? 'Overdue: ' : 'Due: '}
-                                      {deadlineDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </button>
+                        {isActivitiesExpanded && (
+                          activitiesLoading ? (
+                            <div className="flex justify-center py-3">
+                              <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-1">
+                              {activities.map((activity: any) => {
+                                const actId = getIdStr(activity._id);
+                                const isSelected = selectedActivityId === actId;
+                                const isDone = acknowledgedActivities[actId];
+                                const deadlineDate = activity.deadline ? new Date(activity.deadline) : null;
+                                const isOverdue = deadlineDate && deadlineDate < new Date();
+                                return (
+                                  <button
+                                    key={actId}
+                                    onClick={() => {
+                                      setSelectedActivityId(actId);
+                                      setShowBrowniePoints(false);
+                                      // Clear any selected course item and hide current item view
+                                      setSelectedItemId(null);
+                                      setCurrentItem(null);
+                                    }}
+                                    className={`w-full text-left rounded-lg px-3 py-2 transition-all duration-150 border ${isSelected
+                                      ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700'
+                                      : 'bg-card hover:bg-accent/40 border-transparent hover:border-border/40'
+                                      }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <span className="text-xs font-medium leading-snug truncate flex-1">
+                                        {activity.title}
+                                      </span>
+                                      {isDone ? (
+                                        <CheckCircle className="h-3.5 w-3.5 text-green-500 flex-shrink-0 mt-0.5" />
+                                      ) : (
+                                        <div className={`h-1.5 w-1.5 rounded-full mt-1.5 flex-shrink-0 ${isOverdue ? 'bg-red-500' : 'bg-orange-400'}`} />
+                                      )}
                                     </div>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
+                                    {deadlineDate && (
+                                      <div className={`text-[10px] mt-0.5 ${isOverdue ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                        {isOverdue ? 'Overdue: ' : 'Due: '}
+                                        {deadlineDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                      </div>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )
                         )}
                       </div>
                     )}
@@ -1776,7 +1789,22 @@ export default function CoursePage() {
                   <SidebarMenu className="space-y-1 pl-2 py-3">
                     <SidebarMenuItem>
                       <SidebarMenuButton
+                        onClick={() => setShowBrowniePoints(true)}
+                        className={`h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm ${showBrowniePoints ? 'bg-accent/20 text-accent-foreground font-semibold' : ''}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-1 rounded-md bg-accent/15">
+                            <Activity className="h-4 w-4 text-accent-foreground" />
+                          </div>
+                          <span className="text-sm font-medium">Brownie Points</span>
+                        </div>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
                         asChild
+                        onClick={() => setShowBrowniePoints(false)}
                         className="h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
                       >
                         <Link to="/student" className="flex items-center gap-3">
@@ -1888,8 +1916,8 @@ export default function CoursePage() {
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <div className="text-xl font-medium text-foreground truncate" title={currentItem ? currentItem.name : selectedActivity ? selectedActivity.title : 'Select content to begin learning'}>
-                    <b>{currentItem ? currentItem.name : selectedActivity ? selectedActivity.title : 'Select content to begin learning'}</b>
+                  <div className="text-xl font-medium text-foreground truncate" title={showBrowniePoints ? 'Brownie Points' : currentItem ? currentItem.name : selectedActivity ? selectedActivity.title : 'Select content to begin learning'}>
+                    <b>{showBrowniePoints ? 'Brownie Points' : currentItem ? currentItem.name : selectedActivity ? selectedActivity.title : 'Select content to begin learning'}</b>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-auto">
@@ -2033,7 +2061,9 @@ export default function CoursePage() {
                   onSubmit={handleFlagSubmit}
                   isSubmitting={isPending}
                 />
-                {currentItem ? (
+                {showBrowniePoints ? (
+                  <StudentHealthPoints courseId={COURSE_ID} />
+                ) : currentItem ? (
                   <div className="relative z-10 h-full flex flex-col mb-2  sm:mb-1">
                     <div className="flex justify-end mb-1 me-10 gap-2 ">
                       {!isFlagSubmitted &&
