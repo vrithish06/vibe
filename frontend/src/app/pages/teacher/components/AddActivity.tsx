@@ -118,7 +118,7 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel }: AddAct
                             <Select value={formData.activityType} onValueChange={(v) => handleSelectChange('activityType', v)}>
                                 <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="ASSIGNMENT_PROOF">Assignment Proof</SelectItem>
+                                    <SelectItem value="ASSIGNMENT">Assignment</SelectItem>
                                     <SelectItem value="VIBE_MILESTONE">VIBE Milestone</SelectItem>
                                     <SelectItem value="EXTERNAL_IMPORT">External Import</SelectItem>
                                 </SelectContent>
