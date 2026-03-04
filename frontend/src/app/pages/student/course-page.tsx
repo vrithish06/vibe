@@ -231,6 +231,19 @@ export default function CoursePage() {
   }, [selectedActivityId, selectedActivity]);
   // Tracks which activities the student has self-declared as completed (locally)
   const [acknowledgedActivities, setAcknowledgedActivities] = useState<Record<string, boolean>>({});
+
+  // Initialize acknowledgedActivities from backend isCompleted status
+  useEffect(() => {
+    if (activities.length > 0) {
+      const newAcknowledged: Record<string, boolean> = {};
+      activities.forEach((a: any) => {
+        if (a.isCompleted) {
+          newAcknowledged[getIdStr(a._id)] = true;
+        }
+      });
+      setAcknowledgedActivities(prev => ({ ...prev, ...newAcknowledged }));
+    }
+  }, [activities]);
   // State for the self-declaration confirmation dialog
   const [showDeclarationDialog, setShowDeclarationDialog] = useState(false);
   const [isDeclarationPending, setIsDeclarationPending] = useState(false);

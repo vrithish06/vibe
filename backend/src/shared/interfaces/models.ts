@@ -808,6 +808,7 @@ export interface IActivity {
   createdAt: Date;
   updatedAt: Date;
   createdBy: string | ObjectId;
+  submittedUsers?: (string | ObjectId)[]; // Array of student IDs who have submitted the activity
   isDeleted?: boolean;
 }
 

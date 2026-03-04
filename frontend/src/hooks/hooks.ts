@@ -3802,7 +3802,7 @@ export const useAutoApprovalSettings = (
       enabled: !!versionId,
     }
   );
-  
+
   return {
     settings: result.data as { registrationsAutoApproved?: boolean; autoapproval_emails?: string[] } | undefined,
     isLoading: result.isLoading,

@@ -12,8 +12,9 @@ import { FirebaseAuthService } from './modules/auth/services/FirebaseAuthService
 import { ProgressService } from './modules/users/services/ProgressService.js';
 import { EnrollmentService } from './modules/users/services/EnrollmentService.js';
 import { ActivityRepository } from '#shared/database/providers/mongo/repositories/ActivityRepository.js';
-import { HealthPointsRepository } from '#shared/database/providers/mongo/repositories/HealthPointsRepository.js';
 
+import { HealthPointsRepository } from '#shared/database/providers/mongo/repositories/HealthPointsRepository.js';
+import { AuditTrailsHandler } from '#root/shared/middleware/auditTrails.js';
 
 
 export const sharedContainerModule = new ContainerModule(options => {
@@ -40,6 +41,7 @@ export const sharedContainerModule = new ContainerModule(options => {
 
   options.bind(HealthPointsRepository).toSelf().inSingletonScope();
   options.bind(ActivityRepository).toSelf().inSingletonScope();
+  options.bind(AuditTrailsHandler).toSelf().inSingletonScope();
 
   // Other
   options.bind(HttpErrorHandler).toSelf().inSingletonScope();

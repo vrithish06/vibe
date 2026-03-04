@@ -25,8 +25,10 @@ export class ActivityController {
     ) { }
 
     private async buildAuthenticatedUser(user: IUser): Promise<AuthenticatedUser> {
-        const rawEnrollments = await this.enrollmentService.getAllEnrollments((user as any).userId || user._id?.toString());
+        const userIdStr = (user as any).userId || user._id?.toString() || (user as any).id;
+        const rawEnrollments = await this.enrollmentService.getAllEnrollments(userIdStr);
         const authUser = user as unknown as AuthenticatedUser;
+        authUser.userId = userIdStr; // Ensure userId is explicitly set as a string
         authUser.enrollments = (rawEnrollments as any[]).map((e) => ({
             courseId: e.courseId?.toString(),
             versionId: e.courseVersionId?.toString(),

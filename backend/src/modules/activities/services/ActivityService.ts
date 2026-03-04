@@ -131,11 +131,27 @@ export class ActivityService {
         // Students only see PUBLISHED or CLOSED activities (if applicable, but prompt says Published only for now. 
         // Wait, prompt: "Students (Published only)".
 
-        return this.activityRepo.findByCourseVersion(
+        const activities = await this.activityRepo.findByCourseVersion(
             courseVersionId,
             { status: 'PUBLISHED', cohortId },
             session
         );
+
+        console.log(`[ActivityService] getActivitiesForStudent running for user ${user.userId}`);
+
+        return activities.map(activity => {
+            const isComp = activity.submittedUsers?.some(id => {
+                const idStr = id.toString();
+                const userStr = user.userId.toString();
+                // console.log(`[ActivityService] comparing stored ${idStr} with requested ${userStr}`);
+                return idStr === userStr;
+            }) || false;
+
+            return {
+                ...activity,
+                isCompleted: isComp
+            };
+        });
     }
 
     async getActivityById(
@@ -185,6 +201,12 @@ export class ActivityService {
             throw new ForbiddenError('This activity is not available for submission');
         }
 
+        // Check if user already submitted
+        const hasSubmitted = activity.submittedUsers?.some(userId => userId.toString() === user.userId);
+        if (hasSubmitted) {
+            throw new BadRequestError('You have already submitted this activity');
+        }
+
         // Calculate and award health points (best-effort — don't fail submission if HP errors)
         const courseId = activity.courseId?.toString() || (activity.courseId as any as ObjectId).toString();
         let hpAwarded = 0;
@@ -227,6 +249,9 @@ export class ActivityService {
                 // HP error is non-fatal — activity is still counted as submitted
             }
         }
+
+        // Mark the activity as submitted by this user
+        await this.activityRepo.addSubmittedUser(activityId, user.userId, session);
 
         return {
             success: true,

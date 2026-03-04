@@ -123,4 +123,17 @@ export class ActivityRepository {
         );
         return result.modifiedCount > 0;
     }
+
+    async addSubmittedUser(id: string | ObjectId, userId: string | ObjectId, session?: ClientSession): Promise<boolean> {
+        await this.init();
+        const result = await this.activitiesCollection.updateOne(
+            { _id: new ObjectId(id) },
+            {
+                $addToSet: { submittedUsers: new ObjectId(userId) },
+                $set: { updatedAt: new Date() }
+            },
+            { session }
+        );
+        return result.modifiedCount > 0;
+    }
 }
