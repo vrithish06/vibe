@@ -22,7 +22,7 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel }: AddAct
     const [formData, setFormData] = useState({
         title: '',
         description: '',
-        activityType: 'ASSIGNMENT_PROOF',
+        activityType: 'ASSIGNMENT',
         deadline: '',
         rewardType: 'ABSOLUTE',
         rewardValue: 10,
