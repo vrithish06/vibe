@@ -17,7 +17,7 @@ import { subject } from '@casl/ability';
 import { HPEventType, HPStatus } from '#shared/interfaces/models.js';
 import { IsString, IsNumber, IsEnum, IsNotEmpty } from 'class-validator';
 
-// Request DTOs
+// Request DTOs(data transfer objects)
 class GetHealthPointsQuery {
     @IsString() @IsNotEmpty() courseId!: string;
 }

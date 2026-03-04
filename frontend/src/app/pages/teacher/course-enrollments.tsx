@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useNavigate, useSearch } from "@tanstack/react-router"
-import { Search, Users, TrendingUp, CheckCircle, RotateCcw, UserX, BookOpen, FileText, List, Play, AlertTriangle, X, Loader2, Eye, Clock, ChevronRight, ChevronDown, ArrowUp, ArrowDown, BarChart3, Download, FileDown, CheckSquare, Check } from 'lucide-react'
+import { Search, Users, TrendingUp, CheckCircle, RotateCcw, UserX, BookOpen, FileText, List, Play, AlertTriangle, X, Loader2, Eye, Clock, ChevronRight, ChevronDown, ArrowUp, ArrowDown, BarChart3, Download, FileDown, CheckSquare, Check, Heart } from 'lucide-react'
 import { Pagination } from "@/components/ui/Pagination"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -2053,6 +2053,7 @@ function EnrollmentsTable({
   timeSlotsData,
   getStudentTimeSlot,
 }: any) {
+  const navigate = useNavigate();
   const isInactiveTab = enrollmentTab === "INACTIVE"
 
   // Helper function to check if student is already assigned to any timeslot
@@ -2100,6 +2101,18 @@ function EnrollmentsTable({
           >
             <Clock className="h-4 w-4" />
             <span>Configure Time Slots</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              navigate({ to: '/teacher/courses/healthPoints' });
+            }}
+            className="flex items-center gap-2"
+          >
+            <Heart className="h-4 w-4" />
+            <span>Manage Brownie Points</span>
           </Button>
 
           {/* Select Students Button - Only for Active Students */}

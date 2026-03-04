@@ -63,7 +63,7 @@ export function HealthPointsDetail() {
                 </Button>
                 <div>
                     <h1 className="text-3xl font-bold">{user.firstName} {user.lastName}</h1>
-                    <p className="text-muted-foreground">Health Points Details</p>
+                    <p className="text-muted-foreground">Brownie Points Details</p>
                 </div>
             </div>
 
@@ -111,8 +111,8 @@ export function HealthPointsDetail() {
                                             <SelectValue placeholder="Select type" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="BONUS">Bonus (Add HP)</SelectItem>
-                                            <SelectItem value="PENALTY">Penalty (Deduct HP)</SelectItem>
+                                            <SelectItem value="BONUS">Bonus (Add BP)</SelectItem>
+                                            <SelectItem value="PENALTY">Penalty (Deduct BP)</SelectItem>
                                             <SelectItem value="MANUAL">Manual Correction</SelectItem>
                                         </SelectContent>
                                     </Select>

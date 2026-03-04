@@ -76,7 +76,7 @@ export function HealthPointsOverview() {
                     >
                         <ArrowLeft className="w-4 h-4" />
                     </Button>
-                    <h1 className="text-3xl font-bold">Health Points Overview</h1>
+                    <h1 className="text-3xl font-bold">Brownie Points Overview</h1>
                 </div>
 
                 <div className="flex items-center gap-3 bg-card border rounded-xl px-5 py-3 shadow-sm hover:shadow-md transition-shadow">
@@ -91,12 +91,12 @@ export function HealthPointsOverview() {
             </div>
 
             <div className="border rounded-lg p-4 bg-card">
-                <h2 className="text-xl font-semibold mb-4">Student Health Status</h2>
+                <h2 className="text-xl font-semibold mb-4">Student Brownie Points Status</h2>
                 <Table>
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-[400px]">Student Name</TableHead>
-                            <TableHead>Current HP</TableHead>
+                            <TableHead>Current BP</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Last Updated</TableHead>
                         </TableRow>
@@ -105,7 +105,7 @@ export function HealthPointsOverview() {
                         {students && students.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                                    No Health Points records found.
+                                    No Brownie Points records found.
                                 </TableCell>
                             </TableRow>
                         ) : (
