@@ -1,5 +1,5 @@
-import {CourseVersionService} from '#courses/services/CourseVersionService.js';
-import {injectable, inject} from 'inversify';
+import { CourseVersionService } from '#courses/services/CourseVersionService.js';
+import { injectable, inject } from 'inversify';
 import {
   JsonController,
   Post,
@@ -14,12 +14,14 @@ import {
   ForbiddenError,
   Authorized,
   Patch,
+  UseInterceptor,
+  Req,
 } from 'routing-controllers';
-import {OpenAPI, ResponseSchema} from 'routing-controllers-openapi';
-import {COURSES_TYPES} from '#courses/types.js';
-import {BadRequestErrorResponse} from '#shared/middleware/errorHandler.js';
-import {CourseVersion} from '#courses/classes/transformers/CourseVersion.js';
-import {Ability} from '#root/shared/functions/AbilityDecorator.js';
+import { OpenAPI, ResponseSchema } from 'routing-controllers-openapi';
+import { COURSES_TYPES } from '#courses/types.js';
+import { BadRequestErrorResponse } from '#shared/middleware/errorHandler.js';
+import { CourseVersion } from '#courses/classes/transformers/CourseVersion.js';
+import { Ability } from '#root/shared/functions/AbilityDecorator.js';
 import {
   CreateCourseVersionResponse,
   CourseVersionNotFoundErrorResponse,
@@ -32,6 +34,8 @@ import {
   UpdateCourseVersionBody,
   CopyCourseVersionResponse,
   CopyCourseVersionParams,
+  CourseVersionWatchTimeResponse,
+  GetCourseVersionWatchTimeParams,
 } from '#courses/classes/validators/CourseVersionValidators.js';
 import {
   CourseVersionActions,
@@ -42,6 +46,10 @@ import {EnrollmentService} from '#root/modules/users/services/EnrollmentService.
 import {USERS_TYPES} from '#root/modules/users/types.js';
 import {response} from 'express';
 import {CourseActions} from '../abilities/courseAbilities.js';
+import { AuditTrailsHandler } from '#root/shared/middleware/auditTrails.js';
+import { setAuditTrail } from '#root/utils/setAuditTrail.js';
+import { AuditAction, AuditCategory, OutComeStatus } from '#root/modules/auditTrails/interfaces/IAuditTrails.js';
+import { ObjectId } from 'mongodb';
 
 @OpenAPI({
   tags: ['Course Versions'],
@@ -54,7 +62,7 @@ export class CourseVersionController {
     private readonly courseVersionService: CourseVersionService,
     @inject(USERS_TYPES.EnrollmentService)
     private readonly enrollmentService: EnrollmentService,
-  ) {}
+  ) { }
 
   @OpenAPI({
     summary: 'Create a course version',
@@ -64,6 +72,7 @@ Accessible to:
   })
   @Authorized()
   @Post('/:courseId/versions', {transformResponse: true})
+  @UseInterceptor(AuditTrailsHandler)
   @HttpCode(201)
   @ResponseSchema(CreateCourseVersionResponse, {
     description: 'Course version created successfully',
@@ -80,12 +89,13 @@ Accessible to:
     @Params() params: CreateCourseVersionParams,
     @Body() body: CreateCourseVersionBody,
     @Ability(getCourseVersionAbility) {ability, user},
+    @Req() req: Request
   ): Promise<CourseVersion> {
-    const {courseId} = params;
+    const { courseId } = params;
     const userId = user._id.toString();
 
     // Check permissions upfront
-    const courseVersionSubject = subject('CourseVersion', {courseId});
+    const courseVersionSubject = subject('CourseVersion', { courseId });
     if (!ability.can(CourseVersionActions.Create, courseVersionSubject)) {
       throw new ForbiddenError(
         'You do not have permission to create course versions',
@@ -106,6 +116,26 @@ Accessible to:
       String(createdCourseVersion._id), // only convert here
       'INSTRUCTOR',
     );
+
+    setAuditTrail(req, {
+      category: AuditCategory.COURSE_VERSION,
+      action: AuditAction.COURSE_VERSION_CREATE,
+      actor: ObjectId.createFromHexString(userId),
+      context:{
+        courseId: ObjectId.createFromHexString(courseId),
+        courseVersionId: ObjectId.createFromHexString(createdCourseVersion._id.toString()),
+      },
+      changes:{
+        after: {
+          version: createdCourseVersion.version,
+          description: createdCourseVersion.description,
+          totalItems: createdCourseVersion.totalItems,
+        }
+      },
+      outcome:{
+        status: OutComeStatus.SUCCESS,
+      }
+    })
 
     return createdCourseVersion;
   }
@@ -131,12 +161,12 @@ Accessible to:
   })
   async read(
     @Params() params: ReadCourseVersionParams,
-    @Ability(getCourseVersionAbility) {ability, user},
+    @Ability(getCourseVersionAbility) { ability, user },
   ): Promise<CourseVersion> {
-    const {versionId} = params;
+    const { versionId } = params;
 
     // Build the subject context first
-    const courseVersionSubject = subject('CourseVersion', {versionId});
+    const courseVersionSubject = subject('CourseVersion', { versionId });
 
     if (!ability.can(CourseVersionActions.View, courseVersionSubject)) {
       throw new ForbiddenError(
@@ -157,6 +187,7 @@ Accessible to:
   })
   @Authorized()
   @Patch('/:courseId/versions/:versionId', {transformResponse: true})
+  @UseInterceptor(AuditTrailsHandler)
   @ResponseSchema(CourseVersionDataResponse, {
     description: 'Course version updated successfully',
   })
@@ -171,9 +202,10 @@ Accessible to:
   async update(
     @Params() params: UpdateCourseVersionParams,
     @Body() body: UpdateCourseVersionBody,
-    @Ability(getCourseVersionAbility) {ability},
+    @Ability(getCourseVersionAbility) {ability, user},
+    @Req() req: Request
   ): Promise<CourseVersion> {
-    const {courseId, versionId} = params;
+    const { courseId, versionId } = params;
 
     const courseVersionSubject = subject('CourseVersion', {
       courseId,
@@ -186,8 +218,34 @@ Accessible to:
       );
     }
 
+    const existingVersion = await this.courseVersionService.readCourseVersion(versionId, user._id);
     const updatedCourseVersion =
       await this.courseVersionService.updateCourseVersion(versionId, body);
+
+      setAuditTrail(req,{
+      category: AuditCategory.COURSE_VERSION,
+      action: AuditAction.COURSE_VERSION_UPDATE,
+      actor: ObjectId.createFromHexString(user._id.toString()),
+      context:{
+        courseId: ObjectId.createFromHexString(courseId),
+        courseVersionId: ObjectId.createFromHexString(versionId),
+      },
+      changes:{
+        before: {
+          version: existingVersion.version,
+          description: existingVersion.description,
+          totalItems: existingVersion.totalItems,
+        },
+        after: {
+          version: updatedCourseVersion.version,
+          description: updatedCourseVersion.description,
+          totalItems: updatedCourseVersion.totalItems,
+        }
+      },
+      outcome:{
+        status: OutComeStatus.SUCCESS, 
+      }
+  })
     return updatedCourseVersion;
   }
 
@@ -199,6 +257,7 @@ Accessible to:
   })
   @Authorized()
   @Delete('/:courseId/versions/:versionId')
+  @UseInterceptor(AuditTrailsHandler)
   @ResponseSchema(DeleteCourseVersionParams, {
     description: 'Course version deleted successfully',
   })
@@ -212,7 +271,8 @@ Accessible to:
   })
   async delete(
     @Params() params: DeleteCourseVersionParams,
-    @Ability(getCourseVersionAbility) {ability},
+    @Ability(getCourseVersionAbility) {ability, user},
+    @Req() req: Request
   ): Promise<{message: string}> {
     const {courseId, versionId} = params;
     if (!versionId || !courseId) {
@@ -235,6 +295,8 @@ Accessible to:
       throw new BadRequestError(`You can't delete this version!`);
     }
 
+    const courseVersionToDelete = await this.courseVersionService.readCourseVersion(versionId, user._id);
+
     const deletedVersion = await this.courseVersionService.deleteCourseVersion(
       courseId,
       versionId,
@@ -244,6 +306,26 @@ Accessible to:
         'Failed to Delete Version, Please try again later',
       );
     }
+
+    setAuditTrail(req, {
+      category: AuditCategory.COURSE_VERSION,
+      action: AuditAction.COURSE_VERSION_DELETE,
+      actor: ObjectId.createFromHexString(user._id.toString()),
+      context:{
+        courseId: ObjectId.createFromHexString(courseId),
+        courseVersionId: ObjectId.createFromHexString(versionId),
+      },
+      changes:{
+        before: {
+          version: courseVersionToDelete.version,
+          description: courseVersionToDelete.description,
+          totalItems: courseVersionToDelete.totalItems,
+        }
+      },
+      outcome:{
+        status: OutComeStatus.SUCCESS, 
+      }
+    })
     return {
       message: `Version with the ID ${versionId} has been deleted successfully.`,
     };
@@ -257,6 +339,7 @@ Accessible to:
   })
   @Authorized()
   @Post('/:courseId/version/:versionId/copy')
+  @UseInterceptor(AuditTrailsHandler)
   @ResponseSchema(CopyCourseVersionResponse, {
     description: 'Course version copied successfully',
   })
@@ -270,7 +353,8 @@ Accessible to:
   })
   async copy(
     @Params() params: CopyCourseVersionParams,
-    @Ability(getCourseVersionAbility) {ability},
+    @Ability(getCourseVersionAbility) {ability, user},
+    @Req() req: Request
   ): Promise<{message: string}> {
     const {courseId, versionId} = params;
 
@@ -300,8 +384,88 @@ Accessible to:
       );
     }
 
+    setAuditTrail(req, {
+      category: AuditCategory.COURSE_VERSION,
+      action: AuditAction.COURSE_VERSION_CLONE,
+      actor: ObjectId.createFromHexString(user._id.toString()),
+      context:{
+        courseId: ObjectId.createFromHexString(courseId),
+        courseVersionId: ObjectId.createFromHexString(versionId),
+      },
+      outcome:{
+        status: OutComeStatus.SUCCESS, 
+      }
+    });
+
     return {
       message: `Version copied successfully.`,
+    };
+  }
+
+
+
+
+  @OpenAPI({
+    summary: 'Get course version watch time',
+    description: `Returns total watch time for a specific course version`,
+  })
+  @Get('/:courseId/versions/:versionId/watch-time')
+  @ResponseSchema(CourseVersionWatchTimeResponse, {
+    description: 'Course version watch time fetched successfully',
+  })
+  @ResponseSchema(BadRequestErrorResponse, {
+    description: 'Bad Request Error',
+    statusCode: 400,
+  })
+  @ResponseSchema(CourseVersionNotFoundErrorResponse, {
+    description: 'Course or version not found',
+    statusCode: 404,
+  })
+  async getCourseVersionWatchTime(
+    @Params() params: GetCourseVersionWatchTimeParams,
+  ): Promise<CourseVersionWatchTimeResponse> {
+    const { courseId, versionId } = params;
+
+    if (!courseId || !versionId) {
+      throw new BadRequestError('Course ID and Version ID are required');
+    }
+    const result = await this.courseVersionService.getCourseVersionTotalWatchTime(
+      courseId,
+      versionId,
+    );
+
+    if (!result) {
+      throw new InternalServerError(
+        'Failed to fetch watch time, please try again later',
+      );
+    }
+
+    const formatWatchTime = (totalSeconds: number): string => {
+      if (!totalSeconds || totalSeconds <= 0) return '0 minutes';
+
+      const days = Math.floor(totalSeconds / 86400);
+      const hours = Math.floor((totalSeconds % 86400) / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+      const parts: string[] = [];
+
+      if (days > 0) parts.push(`${days} ${days === 1 ? 'day' : 'days'}`);
+      if (hours > 0) parts.push(`${hours} ${hours === 1 ? 'hour' : 'hours'}`);
+      if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`);
+
+      return parts.join(' ');
+    }
+
+    const totalSeconds = result.totalSeconds ?? 0;
+    const totalHours = totalSeconds / 3600;
+    const readableDuration = formatWatchTime(totalSeconds);
+
+    return {
+      message: result.message || 'Course version watch time fetched successfully',
+      totalSeconds,
+      totalHours,
+      totalHoursRounded: Number(totalHours.toFixed(2)),
+      readableDuration,
     };
   }
 }

@@ -113,3 +113,37 @@ export function useAddHPEvent() {
 
     return { mutate, isPending };
 }
+
+export function useStudentSelfHealthPoints(courseId: string) {
+    const [data, setData] = useState<{ healthPoints: any, events: any[], averageHP: number } | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchData = useCallback(async () => {
+        if (!courseId) {
+            setIsLoading(false);
+            return;
+        }
+        try {
+            setIsLoading(true);
+            const res = await fetch(`${BASE_URL}/student/courses/healthPoints?courseId=${courseId}`, {
+                headers: getHeaders()
+            });
+            if (!res.ok) throw new Error('Failed to fetch health points');
+            const json = await res.json();
+            setData(json);
+        } catch (err: any) {
+            console.error(err);
+            setError(err.message);
+            toast.error('Failed to load Health Points');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [courseId]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    return { data, isLoading, error, refetch: fetchData };
+}

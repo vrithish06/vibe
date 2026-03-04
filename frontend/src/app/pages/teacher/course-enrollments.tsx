@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useNavigate } from "@tanstack/react-router"
-import { Search, Users, TrendingUp, CheckCircle, RotateCcw, UserX, BookOpen, FileText, List, Play, AlertTriangle, X, Loader2, Eye, Clock, ChevronRight, ChevronDown, ArrowUp, ArrowDown, BarChart3, Download, FileDown, CheckSquare, Heart } from 'lucide-react'
+import { useNavigate, useSearch } from "@tanstack/react-router"
+import { Search, Users, TrendingUp, CheckCircle, RotateCcw, UserX, BookOpen, FileText, List, Play, AlertTriangle, X, Loader2, Eye, Clock, ChevronRight, ChevronDown, ArrowUp, ArrowDown, BarChart3, Download, FileDown, CheckSquare, Check } from 'lucide-react'
 import { Pagination } from "@/components/ui/Pagination"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { QuizSubmissionDisplay } from "./QuizSubmissionDisplay"
 import { WatchTimeDisplay } from "./WatchTimeDisplay"
+import TimeSlotsModal from "./components/TimeSlotsModal"
 import { useStudentCurrentProgressPath } from "@/hooks/hooks"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -32,6 +33,9 @@ import {
   useCourseQuizScores,
   useRecalculateProgress,
   useBulkUnenrollUsers,
+  useUserModuleProgress,
+  useRecalculateStudentProgress,
+  useGetTimeSlots,
 } from "@/hooks/hooks"
 import { toast } from "sonner"
 import { useCourseStore } from "@/store/course-store"
@@ -186,6 +190,87 @@ export default function CourseEnrollments() {
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
   const [isBulkUnenrollDialogOpen, setIsBulkUnenrollDialogOpen] = useState(false)
+  const [isTimeSlotsModalOpen, setIsTimeSlotsModalOpen] = useState(false);
+
+  // Get URL search params
+  const search = useSearch({ strict: false }) as any
+  const selectMode = search?.selectMode === "true"
+  const excludeAssigned = search?.excludeAssigned === "true"
+
+  // Time slots data for exclusion logic
+  const { data: timeSlotsData } = useGetTimeSlots(
+    courseId && courseId.length === 24 && versionId && versionId.length === 24
+      ? courseId
+      : undefined,
+    versionId && versionId.length === 24
+      ? versionId
+      : undefined
+  );
+
+  // Get assigned student IDs
+  const getAssignedStudentIds = () => {
+    const assignedIds = new Set<string>();
+    timeSlotsData?.slots?.forEach((slot: any) => {
+      slot.studentIds?.forEach((id: string) => assignedIds.add(id));
+    });
+    return assignedIds;
+  };
+
+  // Get assigned timeslot for a student
+  const getStudentTimeSlot = (studentId: string) => {
+    if (!timeSlotsData?.slots) return null;
+
+    for (const slot of timeSlotsData.slots) {
+      if (slot.studentIds?.includes(studentId)) {
+        return slot;
+      }
+    }
+    return null;
+  };
+
+  // Handle student selection completion for time slots
+  const handleTimeSlotStudentSelection = () => {
+    if (selectedUsers.size > 0) {
+      // Send selected students back to TimeSlotsModal
+      window.dispatchEvent(new CustomEvent('studentSelectionComplete', {
+        detail: { selectedStudentIds: Array.from(selectedUsers) }
+      }));
+      // Exit selection mode
+      setIsSelectionMode(false);
+    }
+  };
+
+  // Listen for enableSelectionMode event from TimeSlotsModal
+  useEffect(() => {
+    const handleEnableSelectionMode = (event: CustomEvent) => {
+      const { slot } = event.detail;
+      // Enable selection mode
+      setIsSelectionMode(true);
+      // Pre-select existing students for this slot
+      setSelectedUsers(new Set(slot.studentIds));
+    };
+
+    window.addEventListener('enableSelectionMode', handleEnableSelectionMode as EventListener);
+    return () => {
+      window.removeEventListener('enableSelectionMode', handleEnableSelectionMode as EventListener);
+    };
+  }, []);
+
+  // Auto-enable selection mode if URL params indicate it
+  useEffect(() => {
+    if (selectMode && !isSelectionMode) {
+      setIsSelectionMode(true);
+    }
+  }, [selectMode]);
+
+
+
+  // Fetch module progress for the selected user
+  const { data: userModuleProgress, isLoading: moduleProgressLoading } = useUserModuleProgress(
+    selectedUser?.id || "",
+    courseId || "",
+    versionId || ""
+  )
 
   const toggleSelectionMode = () => {
     setIsSelectionMode((prev) => {
@@ -197,25 +282,6 @@ export default function CourseEnrollments() {
     })
   }
 
-  const handleSelectAll = (checked: boolean) => {
-    const visibleUserIds = studentEnrollments.map((e: any) => e.user?._id || e.user?.id).filter(Boolean)
-
-    if (checked) {
-      // Add all visible students to existing selections
-      setSelectedUsers((prev) => {
-        const newSet = new Set(prev)
-        visibleUserIds.forEach((id: string) => newSet.add(id))
-        return newSet
-      })
-    } else {
-      // Remove all visible students from selections
-      setSelectedUsers((prev) => {
-        const newSet = new Set(prev)
-        visibleUserIds.forEach((id: string) => newSet.delete(id))
-        return newSet
-      })
-    }
-  }
 
   const handleSelectUser = (userId: string, checked: boolean) => {
     const newSelected = new Set(selectedUsers)
@@ -413,6 +479,8 @@ export default function CourseEnrollments() {
   // Active / Inactive tab
   const [enrollmentTab, setEnrollmentTab] = useState<"ACTIVE" | "INACTIVE">("ACTIVE")
   const statusTab: "ACTIVE" | "INACTIVE" = enrollmentTab
+  const [activeCount, setActiveCount] = useState(0)
+  const [inactiveCount, setInactiveCount] = useState(0)
   const {
     data: quizScores,
     isLoading: isLoadingQuizScores,
@@ -449,15 +517,53 @@ export default function CourseEnrollments() {
   // const studentEnrollments = enrollmentsData?.enrollments || [];
   const studentEnrollments = enrollmentsData?.enrollments || []
 
+  // Filter out already assigned students if excludeAssigned is true
+  const filteredStudentEnrollments = excludeAssigned
+    ? studentEnrollments.filter((enrollment: any) => {
+      const assignedIds = getAssignedStudentIds();
+      const studentId = enrollment.user?._id || enrollment.user?.id;
+      return !assignedIds.has(studentId);
+    })
+    : studentEnrollments;
+
+  const handleSelectAll = (checked: boolean) => {
+    const visibleUserIds = filteredStudentEnrollments.map((e: any) => e.user?._id || e.user?.id).filter(Boolean)
+
+    if (checked) {
+      // Add all visible students to existing selections
+      setSelectedUsers((prev) => {
+        const newSet = new Set(prev)
+        visibleUserIds.forEach((id: string) => newSet.add(id))
+        return newSet
+      })
+    } else {
+      // Remove all visible students from selections
+      setSelectedUsers((prev) => {
+        const newSet = new Set(prev)
+        visibleUserIds.forEach((id: string) => newSet.delete(id))
+        return newSet
+      })
+    }
+  }
+
 
   // API Hooks
   const resetProgressMutation = useResetProgress()
   const unenrollMutation = useUnenrollUser()
   const bulkUnenrollMutation = useBulkUnenrollUsers()
   const recalculateMutation = useRecalculateProgress()
+  const recalculateStudentMutation = useRecalculateStudentProgress()
+
 
   // Pagination state
   const totalDocuments = enrollmentsData?.totalDocuments || 0
+  useEffect(() => {
+    if (enrollmentTab === "ACTIVE") {
+      setActiveCount(totalDocuments)
+    } else {
+      setInactiveCount(totalDocuments)
+    }
+  }, [totalDocuments, enrollmentTab])
   const totalPages = enrollmentsData?.totalPages || 1
 
 
@@ -569,20 +675,21 @@ export default function CourseEnrollments() {
     if (userToRecalculate && courseId) {
       const userId = userToRecalculate?.id ?? undefined;
       try {
-        await recalculateMutation.mutateAsync({
-          params: {
-            query: {
-              courseId: courseId,
-              userId: userId,
-              courseVersionId: versionId,
-            },
+        await recalculateStudentMutation.mutateAsync({
+          body: {
+            userId: userId,
+            courseId: courseId,
+            courseVersionId: versionId,
+
           },
         })
         setIsRecalculateProgressOpen(false)
         setUsertToRecalculate(null)
         refetchEnrollments()
-      } catch (error) {
-        console.error("Failed to remove student:", error)
+        toast.success("Progress recalculated successfully")
+      } catch (error: any) {
+        console.error("Failed to recalculate progress:", error)
+        toast.error(error?.message || "Failed to recalculate progress")
       }
     }
   }
@@ -783,670 +890,235 @@ export default function CourseEnrollments() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto py-4 space-y-8">
-        {/* Enhanced Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div className="space-y-4">
-            <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              Course Enrollments
-            </h1>
-            <div className="space-y-2">
+    <>
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto py-4 space-y-8">
+          {/* Enhanced Header */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="space-y-4">
+              <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                Course Enrollments
+              </h1>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-1 bg-gradient-to-b from-primary to-accent rounded-full"></div>
+                  <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-foreground">{course.name}</h2>
+                  <span className="text-lg text-muted-foreground">•</span>
+                  <h3 className="text-base md:text-lg lg:text-xl font-semibold text-accent">{version.version}</h3>
+                </div>
+                <div className="h-1 w-32 bg-gradient-to-r from-primary to-accent rounded-full ml-4"></div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                className="gap-2 bg-primary hover:bg-accent text-primary-foreground cursor-pointer"
+                onClick={() => {
+                  const { setCurrentCourse } = useCourseStore.getState()
+                  setCurrentCourse({
+                    courseId: courseId || "",
+                    versionId: versionId || "",
+                    moduleId: null,
+                    sectionId: null,
+                    itemId: null,
+                    watchItemId: null,
+                  })
+                  navigate({ to: "/teacher/courses/invite" })
+                }}
+              >
+                Send Invites
+              </Button>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="flex lg:flex-nowrap flex-wrap gap-6">
+            {stats.map((stat) => (
+              <Card key={stat.title} className="border-0 shadow-sm hover:shadow-md transition-shadow w-full">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
+                      <p className="text-2xl font-bold mt-1">{stat.value}</p>
+                    </div>
+                    <div className={`p-3 rounded-full ${stat.bgColor}`}>
+                      <stat.icon className={`h-5 w-5 ${stat.color}`} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+              <Input
+                placeholder="Search students by user ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value?.toLowerCase())}
+                className="pl-12 h-12 border-border bg-card text-card-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
+              />
+              <X className="absolute right-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground cursor-pointer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSearchQuery("");
+                }} />
+            </div>
+
+
+            {/* Time Slot Selection Mode Header */}
+            {(selectMode || isSelectionMode) && (
               <div className="flex items-center gap-3">
-                <div className="h-8 w-1 bg-gradient-to-b from-primary to-accent rounded-full"></div>
-                <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-foreground">{course.name}</h2>
-                <span className="text-lg text-muted-foreground">•</span>
-                <h3 className="text-base md:text-lg lg:text-xl font-semibold text-accent">{version.version}</h3>
-              </div>
-              <div className="h-1 w-32 bg-gradient-to-r from-primary to-accent rounded-full ml-4"></div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button
-              className="gap-2 bg-primary hover:bg-accent text-primary-foreground cursor-pointer"
-              onClick={() => {
-                const { setCurrentCourse } = useCourseStore.getState()
-                setCurrentCourse({
-                  courseId: courseId || "",
-                  versionId: versionId || "",
-                  moduleId: null,
-                  sectionId: null,
-                  itemId: null,
-                  watchItemId: null,
-                })
-                navigate({ to: "/teacher/courses/invite" })
-              }}
-            >
-              Send Invites
-            </Button>
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div className="flex lg:flex-nowrap flex-wrap gap-6">
-          {stats.map((stat) => (
-            <Card key={stat.title} className="border-0 shadow-sm hover:shadow-md transition-shadow w-full">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-                    <p className="text-2xl font-bold mt-1">{stat.value}</p>
-                  </div>
-                  <div className={`p-3 rounded-full ${stat.bgColor}`}>
-                    <stat.icon className={`h-5 w-5 ${stat.color}`} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Search */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input
-              placeholder="Search students by user ID..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value?.toLowerCase())}
-              className="pl-12 h-12 border-border bg-card text-card-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
-            />
-            <X className="absolute right-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground cursor-pointer"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setSearchQuery("");
-              }} />
-          </div>
-        </div>
-
-
-
-        {/* Students Table */}
-        {/* Students Table + Tabs */}
-        <Tabs
-          value={enrollmentTab}
-          onValueChange={(v) => setEnrollmentTab(v as "ACTIVE" | "INACTIVE")}
-          className="w-full"
-        >
-          {/* Tabs Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <TabsList className="grid w-full sm:w-[420px] grid-cols-2 h-11 bg-muted/30 p-1 rounded-xl">
-              <TabsTrigger
-                value="ACTIVE"
-                className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm font-semibold"
-              >
-                Active Students
-              </TabsTrigger>
-
-              <TabsTrigger
-                value="INACTIVE"
-                className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm font-semibold"
-              >
-                Inactive Students
-              </TabsTrigger>
-            </TabsList>
-            <Button
-              variant="outline"
-              onClick={() => navigate({ to: '/teacher/courses/healthPoints' })}
-              className="flex items-center gap-2"
-            >
-              <Heart className="h-4 w-4" />
-              Manage Health Points
-            </Button>
-          </div>
-          {/* Active Tab */}
-          <TabsContent value="ACTIVE" className="mt-4">
-            <EnrollmentsTable
-              totalDocuments={totalDocuments}
-              studentEnrollments={studentEnrollments}
-              enrollmentsLoading={enrollmentsLoading}
-              isSearching={isSearching}
-              enrollmentTab={enrollmentTab}
-              searchQuery={searchQuery}
-              limit={limit}
-              handleLimitChange={handleLimitChange}
-              handleSort={handleSort}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              isLoadingQuizScores={isLoadingQuizScores}
-              setIsExporting={setIsExporting}
-              unenrollMutation={unenrollMutation}
-              user={user}
-              handleViewProgress={handleViewProgress}
-              handleRemoveStudent={handleRemoveStudent}
-              getRoleBadge={getRoleBadge}
-              isSelectionMode={isSelectionMode}
-              selectedUsers={selectedUsers}
-              onSelectUser={handleSelectUser}
-              onSelectAll={handleSelectAll}
-              toggleSelectionMode={toggleSelectionMode}
-              handleBulkUnenroll={handleBulkUnenroll}
-            />
-          </TabsContent>
-
-          {/* Inactive Tab */}
-          <TabsContent value="INACTIVE" className="mt-4">
-            <EnrollmentsTable
-              totalDocuments={totalDocuments}
-              studentEnrollments={studentEnrollments}
-              enrollmentsLoading={enrollmentsLoading}
-              isSearching={isSearching}
-              enrollmentTab={enrollmentTab}
-              searchQuery={searchQuery}
-              limit={limit}
-              handleLimitChange={handleLimitChange}
-              handleSort={handleSort}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              isLoadingQuizScores={isLoadingQuizScores}
-              setIsExporting={setIsExporting}
-              unenrollMutation={unenrollMutation}
-              user={user}
-              handleViewProgress={handleViewProgress}
-              handleRemoveStudent={handleRemoveStudent}
-              getRoleBadge={getRoleBadge}
-            />
-          </TabsContent>
-
-
-        </Tabs>
-
-
-        {/* Enhanced View Progress Modal */}
-
-        {isViewProgressDialogOpen && selectedUser && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center mb-0">
-            {/* Enhanced Backdrop */}
-            <div
-              className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
-              onClick={() => setIsViewProgressDialogOpen(false)}
-            />
-            {/* Enhanced Modal */}
-            <div className="relative bg-card border border-border rounded-2xl shadow-2xl max-w-4xl w-full mx-4 p-8 space-y-6 max-h-[90vh] overflow-y-auto animate-in fade-in-0 zoom-in-95 duration-300 cursor-default">
-              {/* Header */}
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl md:text-2xl font-semibold text-card-foreground">Student Progress Details</h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsViewProgressDialogOpen(false)}
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-full cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* Enhanced Student Info */}
-              <div className="flex flex-wrap items-center gap-4 p-6 bg-gradient-to-r from-muted/30 to-muted/10 rounded-xl border border-border">
-                <Avatar className="h-12 w-12 border-2 border-primary/20 shadow-md">
-                  <AvatarImage src={selectedUser.avatar || "/placeholder.svg"} alt={selectedUser.name} />
-                  <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground font-bold">
-                    {selectedUser.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <p className="font-medium text-card-foreground truncate text-base md:text-lg">{selectedUser.name}</p>
-                  <p className="text-muted-foreground truncate">{selectedUser.email}</p>
-
-
-
-                </div>
-
-                {/* Content Summary Dropdown */}
-                {selectedUser?.contentCounts && (
-                  <div className="border border-border rounded-lg ml-auto p-2">
-
-                    {/* Header */}
-                    {/* <button
-                      onClick={() => setShowContentSummary(prev => !prev)}
-                      className="flex items-center gap-2 px-3 py-2 text-sm font-medium hover:bg-muted/20 rounded-md"
-                    > */}
-                    <p>Content Summary</p>
-                    {/* {showContentSummary ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )} */}
-                    {/* </button> */}
-                    <div className="flex justify-between items-center mt-2 mb-2">
-                      <p className="text-sm text-muted-foreground mb-2">Completion Percentage</p>
-                      <EnrollmentProgress progress={(selectedUser.progress || 0)} />
-                    </div>
-                    {/* Body */}
-                    {
-                      // showContentSummary &&
-                      (
-                        <div className=" grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-
-                          <SummaryRow label="Total Items" value={selectedUser.contentCounts.totalItems} />
-
-                          <SummaryRow
-                            label="Videos"
-                            value={`${selectedUser.contentCounts.completedVideos} / ${selectedUser.contentCounts.videos}`}
-                          />
-
-                          <SummaryRow
-                            label="Quizzes"
-                            value={`${selectedUser.contentCounts.completedQuizzes} / ${selectedUser.contentCounts.quizzes}`}
-                          />
-
-                          <SummaryRow
-                            label="Articles"
-                            value={`${selectedUser.contentCounts.completedArticles} / ${selectedUser.contentCounts.articles}`}
-                          />
-
-                          <SummaryRow
-                            label="Projects"
-                            value={`${selectedUser.contentCounts.completedProjects} / ${selectedUser.contentCounts.project}`}
-                          />
-
-                          <SummaryRow
-                            label="Quiz Score"
-                            value={`${selectedUser.contentCounts.totalQuizScore || 0} / ${selectedUser.contentCounts.totalQuizMaxScore || 0}`}
-                          />
-
-                          <SummaryRow
-                            label="Items Completed"
-                            value={`${selectedUser.completedItemsCount || 0} / ${version?.totalItems ?? 0}`}
-                          />
-
-
-
-
-                        </div>
-                      )}
-                  </div>
-                )}
-
-              </div>
-
-              <div className="mt-4">
-                {/* {hasCompletedCourse ? (
-    <div className="p-4 rounded-lg bg-green-50 border border-green-200 text-green-700 font-medium">
-      🎉 Student has completed the course
-    </div>
-  ) : (
-    <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 font-medium">
-      ⏳ Course is still in progress
-    </div>
-  )} */}
-              </div>
-
-              {/* Current Learning Position */}
-              <div className="space-y-2 p-4 rounded-lg border border-border bg-muted/20">
-                <h4 className="text-sm font-semibold text-muted-foreground">
-                  Current Learning Position
-                </h4>
-
-                {pathError && (
-                  <div className="text-sm text-destructive">
-                    <p>Failed to load current progress</p>
-                    <p className="text-xs mt-1">Error: {pathError.message || 'Unknown error'}</p>
-                  </div>
-                )}
-
-                {!currentPath && !pathError && (
-                  <p className="text-sm text-muted-foreground">
-                    Progress not started yet
+                <div className="bg-card border border-border rounded-lg px-4 py-2">
+                  <p className="text-sm text-card-foreground font-medium">
+                    Select students for time slot assignment
                   </p>
-                )}
-
-                {currentPath && currentPath.message && (
-                  <div className="text-sm text-muted-foreground">
-                    <p>{currentPath.message}</p>
-                  </div>
-                )}
-
-                {currentPath && currentPath.module && (
-                  <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                    <span className="px-2 py-1 rounded bg-blue-100 text-blue-700">
-                      {currentPath.module.name}
-                    </span>
-
-                    <span className="text-muted-foreground">›</span>
-
-                    <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-700">
-                      {currentPath.section.name}
-                    </span>
-
-                    <span className="text-muted-foreground">›</span>
-
-                    <span className="px-2 py-1 rounded bg-purple-100 text-purple-700">
-                      {currentPath.item.name}
-                    </span>
-
-                    <span className="ml-2 text-xs px-2 py-0.5 rounded border">
-                      {currentPath.item.type}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-
-              {/* Course Structure */}
-              <div className="space-y-4">
-                {enrollmentTab === "ACTIVE" && (
-                  <div className="flex justify-between">
-                    <TooltipProvider delayDuration={300}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              handleResetProgress({
-                                id: selectedUser.id,
-                                name: `${selectedUser.name || ""}`.trim() || "Unknown User",
-                                email: selectedUser.email,
-                                enrolledDate: selectedUser.enrolledDate,
-                                progress: 0,
-                              })
-                            }
-                            className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all duration-200 cursor-pointer"
-                            disabled={resetProgressMutation.isPending || selectedUser.isDeleted}
-                          >
-                            {resetProgressMutation.isPending ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                              <RotateCcw className="h-4 w-4 mr-2" />
-                            )}
-                            Reset
-                          </Button>
-                        </TooltipTrigger>
-
-                        <TooltipContent>
-                          <p>Reset student progress</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              handleRecalculateProgress({
-                                id: selectedUser.id,
-                                name: `${selectedUser.name || ""}`.trim() || "Unknown User",
-                                email: selectedUser.email,
-                                enrolledDate: selectedUser.enrolledDate,
-                                progress: 0,
-                              })
-                            }
-                            className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
-                            disabled={
-                              unenrollMutation.isPending ||
-                              user?.email == selectedUser.email ||
-                              selectedUser.isDeleted
-                            }
-                          >
-                            {unenrollMutation.isPending ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                              <RotateCcw className="h-4 w-4 mr-2" />
-                            )}
-                            Recalculate
-                          </Button>
-                        </TooltipTrigger>
-
-                        <TooltipContent>Recalculate student progress</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                )}
-                {/* add the code here */}
-                <h3 className="text-lg font-semibold text-foreground">Course Structure</h3>
-                <div className="space-y-2 max-h-96 overflow-y-auto border border-border rounded-lg p-4">
-                  {getAvailableModules().map((module: any) => (
-                    <div key={module.moduleId} className="space-y-2">
-                      {/* Module */}
-                      <div
-                        className="flex items-center gap-2 p-3 bg-muted/20 rounded-lg cursor-pointer hover:bg-muted/30 transition-colors"
-                        onClick={() => toggleModule(module.moduleId)}
-                      >
-                        {expandedModules.has(module.moduleId) ? (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <BookOpen className="h-5 w-5 text-blue-600" />
-                        <span className="font-semibold text-foreground">{module.name}</span>
-                      </div>
-
-                      {/* Sections */}
-                      {expandedModules.has(module.moduleId) && (
-                        <div className="ml-6 space-y-2">
-                          {module.sections?.map((section: any) => (
-                            <div key={section.sectionId} className="space-y-2">
-                              <div
-                                className="flex items-center gap-2 p-2 bg-muted/10 rounded-lg cursor-pointer hover:bg-muted/20 transition-colors"
-                                onClick={() => toggleSection(section.sectionId)}
-                              >
-                                {expandedSections.has(section.sectionId) ? (
-                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                ) : (
-                                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                )}
-                                <FileText className="h-4 w-4 text-emerald-600" />
-                                <span className="font-medium text-foreground">{section.name}</span>
-                              </div>
-
-                              {/* Items */}
-                              {expandedSections.has(section.sectionId) && (
-                                <SectionItems
-                                  versionId={versionId!}
-                                  moduleId={module.moduleId}
-                                  sectionId={section.sectionId}
-                                  selectedViewItem={selectedViewItem}
-                                  onItemSelect={(itemId, itemType, itemName) => {
-                                    setSelectedViewItem(itemId)
-                                    setSelectedViewItemType(itemType)
-                                    setSelectedViewItemName(itemName)
-                                  }}
-                                  getItemIcon={getItemIcon}
-                                />
-                              )}
-                            </div>
-                          )) || (
-                              <p className="text-sm text-muted-foreground ml-6">
-                                No sections in this module
-                              </p>
-                            )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  <p className="text-xs text-muted-foreground">
+                    {selectedUsers.size} student{selectedUsers.size !== 1 ? 's' : ''} selected
+                  </p>
                 </div>
-              </div>
-
-
-              {/* Item Details Display */}
-              {selectedViewItem && (
-                <div className="space-y-4">
-                  {selectedViewItemType?.toUpperCase() === 'QUIZ' ? (
-                    <QuizSubmissionDisplay
-                      userId={selectedUser.id}
-                      quizId={selectedViewItem}
-                      itemName={selectedViewItemName}
-                    />
-                  ) : (
-                    <WatchTimeDisplay
-                      userId={selectedUser.id}
-                      itemId={selectedViewItem}
-                      courseId={courseId!}
-                      courseVersionId={versionId}
-                      itemName={selectedViewItemName}
-                      itemType={selectedViewItemType}
-                    />
-                  )}
-                </div>
-              )}
-
-              {!selectedViewItem && (
-                <div className="p-8 text-center text-muted-foreground">
-                  <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Select an item from the course structure above to view details.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Enhanced Remove Student Confirmation Modal */}
-        {isRemoveDialogOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center mb-0">
-            <div
-              className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
-              onClick={() => setIsRemoveDialogOpen(false)}
-            />
-            <div className="relative bg-card border border-border rounded-2xl shadow-2xl sm:max-w-lg max-[425px]:w-[90vw] w-full mx-4 sm:p-10 p-5 space-y-8 animate-in fade-in-0 zoom-in-95 duration-300 cursor-default">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl md:text-2xl font-bold text-card-foreground">Remove Student</h2>
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsRemoveDialogOpen(false)}
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-full cursor-pointer"
+                  onClick={handleTimeSlotStudentSelection}
+                  disabled={selectedUsers.size === 0}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
-                  <X className="h-4 w-4" />
+                  <Check className="h-4 w-4 mr-2" />
+                  Confirm Selection
                 </Button>
-              </div>
-
-              <div className="space-y-8">
-                <p className="text-lg text-card-foreground">
-                  Want to remove <strong className="text-primary">{userToRemove?.name}</strong> from{" "}
-                  <strong className="text-primary">
-                    {course.name} ({version.version})
-                  </strong>
-                  ?
-                </p>
-
-                <div className="flex gap-4 p-6 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl">
-                  <div><AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" /></div>
-                  <div className="text-sm text-red-800 dark:text-red-200">
-                    <strong>Warning:</strong> This action cannot be undone. The student will lose access to the course
-                    version and all their progress data.
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
                 <Button
                   variant="outline"
-                  onClick={() => setIsRemoveDialogOpen(false)}
-                  className="min-w-[100px] cursor-pointer"
+                  onClick={() => setIsSelectionMode(false)}
+                  className="border-border text-foreground hover:bg-muted"
                 >
-                  No, Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={confirmRemoveStudent}
-                  disabled={unenrollMutation.isPending}
-                  className="min-w-[100px] shadow-lg cursor-pointer"
-                >
-                  {unenrollMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Removing...
-                    </>
-                  ) : (
-                    "Yes, Remove"
-                  )}
+                  Cancel
                 </Button>
               </div>
-            </div>
+            )}
           </div>
-        )}
 
-        {isRecalculateProgressOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center mb-0">
-            <div
-              className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
-              onClick={() => setIsRecalculateProgressOpen(false)}
-            />
-            <div className="relative bg-card border border-border rounded-2xl shadow-2xl sm:max-w-lg max-[425px]:w-[90vw] w-full mx-4 sm:p-10 p-5 space-y-8 animate-in fade-in-0 zoom-in-95 duration-300 cursor-default">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl md:text-2xl font-bold text-card-foreground">Recalculate Progress</h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsRecalculateProgressOpen(false)}
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-full cursor-pointer"
+
+
+          {/* Students Table */}
+          {/* Students Table + Tabs */}
+          <Tabs
+            value={enrollmentTab}
+            onValueChange={(v) => setEnrollmentTab(v as "ACTIVE" | "INACTIVE")}
+            className="w-full"
+          >
+            {/* Tabs Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <TabsList className="grid w-full sm:w-[420px] grid-cols-2 h-11 bg-muted/30 p-1 rounded-xl">
+                <TabsTrigger
+                  value="ACTIVE"
+                  className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm font-semibold"
                 >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+                  Active Students({activeCount})
+                </TabsTrigger>
 
-              <div className="space-y-8">
-                <p className="text-lg text-card-foreground">
-                  Want to Recalculate progress of <strong className="text-primary">{userToRecalculate?.name}</strong>
-                  ?
-                </p>
-
-                {/* <div className="flex gap-4 p-6 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl">
-                  <div><AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" /></div>
-                  <div className="text-sm text-red-800 dark:text-red-200">
-                    <strong>Warning:</strong> This action cannot be undone. The student will lose access to the course
-                    version and all their progress data.
-                  </div>
-                </div> */}
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsRecalculateProgressOpen(false)}
-                  className="min-w-[100px] cursor-pointer"
+                <TabsTrigger
+                  value="INACTIVE"
+                  className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm font-semibold"
                 >
-                  No, Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={confirmReCalculateProgress}
-                  disabled={recalculateMutation.isPending}
-                  className="min-w-[100px] shadow-lg cursor-pointer"
-                >
-                  {unenrollMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Recalculating...
-                    </>
-                  ) : (
-                    "Yes, Recalculate"
-                  )}
-                </Button>
-              </div>
+                  Inactive Students({inactiveCount})
+                </TabsTrigger>
+              </TabsList>
             </div>
-          </div>
-        )}
+            {/* Active Tab */}
+            <TabsContent value="ACTIVE" className="mt-4">
+              <EnrollmentsTable
+                totalDocuments={totalDocuments}
+                studentEnrollments={filteredStudentEnrollments}
+                enrollmentsLoading={enrollmentsLoading}
+                isSearching={isSearching}
+                enrollmentTab={enrollmentTab}
+                searchQuery={searchQuery}
+                limit={limit}
+                handleLimitChange={handleLimitChange}
+                handleSort={handleSort}
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                isLoadingQuizScores={isLoadingQuizScores}
+                setIsExporting={setIsExporting}
+                unenrollMutation={unenrollMutation}
+                user={user}
+                handleViewProgress={handleViewProgress}
+                handleRemoveStudent={handleRemoveStudent}
+                getRoleBadge={getRoleBadge}
+                isSelectionMode={isSelectionMode}
+                selectedUsers={selectedUsers}
+                onSelectUser={handleSelectUser}
+                onSelectAll={handleSelectAll}
+                toggleSelectionMode={toggleSelectionMode}
+                handleBulkUnenroll={handleBulkUnenroll}
+                setIsTimeSlotsModalOpen={setIsTimeSlotsModalOpen}
+                timeSlotsData={timeSlotsData}
+                getStudentTimeSlot={getStudentTimeSlot}
+              />
+            </TabsContent>
 
-        {/* Enhanced Reset Progress Modal */}
-        {isResetDialogOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center mb-0">
-            <div
-              className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
-              onClick={() => setIsResetDialogOpen(false)}
-            />
-            <div className="relative bg-card border border-border rounded-2xl shadow-2xl max-w-3xl w-full mx-4 sm:p-8 p-4 space-y-6 max-h-[90vh] overflow-y-auto animate-in fade-in-0 zoom-in-95 duration-300 cursor-default">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl md:text-2xl font-bold text-card-foreground">Reset Student Progress</h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsResetDialogOpen(false)}
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-full cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+            {/* Inactive Tab */}
+            <TabsContent value="INACTIVE" className="mt-4">
+              <EnrollmentsTable
+                totalDocuments={totalDocuments}
+                studentEnrollments={studentEnrollments}
+                enrollmentsLoading={enrollmentsLoading}
+                isSearching={isSearching}
+                enrollmentTab={enrollmentTab}
+                searchQuery={searchQuery}
+                limit={limit}
+                handleLimitChange={handleLimitChange}
+                handleSort={handleSort}
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                isLoadingQuizScores={isLoadingQuizScores}
+                setIsExporting={setIsExporting}
+                unenrollMutation={unenrollMutation}
+                user={user}
+                handleViewProgress={handleViewProgress}
+                handleRemoveStudent={handleRemoveStudent}
+                getRoleBadge={getRoleBadge}
+                isSelectionMode={false}
+                selectedUsers={new Set()}
+                onSelectUser={handleSelectUser}
+                onSelectAll={handleSelectAll}
+                toggleSelectionMode={toggleSelectionMode}
+                handleBulkUnenroll={handleBulkUnenroll}
+                setIsTimeSlotsModalOpen={setIsTimeSlotsModalOpen}
+                timeSlotsData={timeSlotsData}
+                getStudentTimeSlot={getStudentTimeSlot}
+              />
+            </TabsContent>
+          </Tabs>
 
-              {selectedUser && (
-                <div className="flex items-center gap-4 p-6 bg-gradient-to-r from-muted/30 to-muted/10 rounded-xl border border-border">
+
+          {/* Enhanced View Progress Modal */}
+
+          {isViewProgressDialogOpen && selectedUser && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center mb-0">
+              {/* Enhanced Backdrop */}
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
+                onClick={() => setIsViewProgressDialogOpen(false)}
+              />
+              {/* Enhanced Modal */}
+              <div className="relative bg-card border border-border rounded-2xl shadow-2xl max-w-4xl w-full mx-4 p-8 space-y-6 max-h-[90vh] overflow-y-auto animate-in fade-in-0 zoom-in-95 duration-300 cursor-default">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl md:text-2xl font-semibold text-card-foreground">Student Progress Details</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsViewProgressDialogOpen(false)}
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-full cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {/* Enhanced Student Info */}
+                <div className="flex flex-wrap items-center gap-4 p-6 bg-gradient-to-r from-muted/30 to-muted/10 rounded-xl border border-border">
                   <Avatar className="h-12 w-12 border-2 border-primary/20 shadow-md">
                     <AvatarImage src={selectedUser.avatar || "/placeholder.svg"} alt={selectedUser.name} />
                     <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground font-bold">
@@ -1456,227 +1128,740 @@ export default function CourseEnrollments() {
                         .join("")}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-card-foreground truncate text-lg">{selectedUser.name}</p>
+                  <div className="flex-1">
+                    <p className="font-medium text-card-foreground truncate text-base md:text-lg">{selectedUser.name}</p>
                     <p className="text-muted-foreground truncate">{selectedUser.email}</p>
+
+
+
                   </div>
-                </div>
-              )}
 
-              <p className="text-muted-foreground">
-                Choose the scope of progress reset for this student in{" "}
-                <strong>
-                  {course.name} ({version.version})
-                </strong>
-                . This action cannot be undone.
-              </p>
+                  {/* Content Summary Dropdown */}
+                  {selectedUser?.contentCounts && (
+                    <div className="border border-border rounded-lg ml-auto p-2">
 
-              <div className="space-y-8 flex justify-around flex-wrap">
-                <div className="space-y-3">
-                  <Label htmlFor="reset-scope" className="text-sm font-bold text-foreground">
-                    Reset Scope
-                  </Label>
-                  <Select value={resetScope} onValueChange={(value: any) => setResetScope(value)}>
-                    <SelectTrigger className="h-16 border-border bg-card text-card-foreground cursor-pointer">
-                      <SelectValue placeholder="Select reset scope" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-border cursor-pointer">
-                      <SelectItem value="course" className="cursor-pointer">
-                        <div className="flex items-center sm:gap-3 gap-1 py-3 sm:px-2">
-                          <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                          <div>
-                            <div className="font-semibold">Entire Course Version</div>
-                            <div className="text-xs text-muted-foreground">Reset all progress in this version</div>
+                      {/* Header */}
+                      {/* <button
+                      onClick={() => setShowContentSummary(prev => !prev)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-medium hover:bg-muted/20 rounded-md"
+                    > */}
+                      <p>Content Summary</p>
+                      {/* {showContentSummary ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )} */}
+                      {/* </button> */}
+                      <div className="flex justify-between items-center mt-2 mb-2">
+                        <p className="text-sm text-muted-foreground mb-2">Completion Percentage</p>
+                        <EnrollmentProgress progress={(selectedUser.progress || 0)} />
+                      </div>
+                      {/* Body */}
+                      {
+                        // showContentSummary &&
+                        (
+                          <div className=" grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+
+                            <SummaryRow label="Total Items" value={selectedUser.contentCounts.totalItems} />
+
+                            <SummaryRow
+                              label="Videos"
+                              value={`${selectedUser.contentCounts.completedVideos} / ${selectedUser.contentCounts.videos}`}
+                            />
+
+                            <SummaryRow
+                              label="Quizzes"
+                              value={`${selectedUser.contentCounts.completedQuizzes} / ${selectedUser.contentCounts.quizzes}`}
+                            />
+
+                            <SummaryRow
+                              label="Articles"
+                              value={`${selectedUser.contentCounts.completedArticles} / ${selectedUser.contentCounts.articles}`}
+                            />
+
+                            <SummaryRow
+                              label="Projects"
+                              value={`${selectedUser.contentCounts.completedProjects} / ${selectedUser.contentCounts.project}`}
+                            />
+
+                            <SummaryRow
+                              label="Quiz Score"
+                              value={`${selectedUser.contentCounts.totalQuizScore || 0} / ${selectedUser.contentCounts.totalQuizMaxScore || 0}`}
+                            />
+
+                            <SummaryRow
+                              label="Items Completed"
+                              value={`${selectedUser.completedItemsCount || 0} / ${version?.totalItems ?? 0}`}
+                            />
+
+
+
+
                           </div>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="module" className="cursor-pointer" >
-                        <div className="flex items-center sm:gap-3 gap-1 py-3 sm:px-2">
-                          <List className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                          <div>
-                            <div className="font-semibold">Specific Module</div>
-                            <div className="text-xs text-muted-foreground">Reset module progress</div>
-                          </div>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="section" className="cursor-pointer" >
-                        <div className="flex items-center sm:gap-3 gap-1 py-3 sm:px-2">
-                          <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                          <div>
-                            <div className="font-semibold">Specific Section</div>
-                            <div className="text-xs text-muted-foreground">Reset section progress</div>
-                          </div>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="item" className="cursor-pointer" >
-                        <div className="flex items-center sm:gap-3 gap-1 py-3 sm:px-2">
-                          <Play className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                          <div>
-                            <div className="font-semibold">Specific Item</div>
-                            <div className="text-xs text-muted-foreground">Reset single item</div>
-                          </div>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {(resetScope === "module" || resetScope === "section" || resetScope === "item") && (
-                  <div className="space-y-3">
-                    <Label htmlFor="module" className="text-sm font-bold text-foreground">
-                      Module
-                    </Label>
-                    <Select value={selectedModule} onValueChange={setSelectedModule}>
-                      <SelectTrigger className="h-16 border-border bg-card text-card-foreground cursor-pointer">
-                        <SelectValue placeholder="Select module" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-card border-border cursor-pointer">
-                        {getAvailableModules().map((module: any) => (
-                          <SelectItem key={module.moduleId} value={module.moduleId} className="cursor-pointer">
-                            <div className="py-2">
-                              <div className="font-semibold">{module.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {module.sections?.length || 0} sections
-                              </div>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {(resetScope === "section" || resetScope === "item") && selectedModule && (
-                  <div className="space-y-3">
-                    <Label htmlFor="section" className="text-sm font-bold text-foreground">
-                      Section
-                    </Label>
-                    <Select value={selectedSection} onValueChange={setSelectedSection}>
-                      <SelectTrigger className="h-16 border-border bg-card text-card-foreground cursor-pointer">
-                        <SelectValue placeholder="Select section" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-card border-border cursor-pointer">
-                        {getAvailableSections().map((section: any) => (
-                          <SelectItem key={section.sectionId} value={section.sectionId} className="cursor-pointer">
-                            <div className="py-2">
-                              <div className="font-semibold">{section.name}</div>
-                              <div className="text-xs text-muted-foreground">Section in selected module</div>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {resetScope === "item" && selectedModule && selectedSection && (
-                  <ItemSelector
-                    versionId={versionId!}
-                    moduleId={selectedModule}
-                    sectionId={selectedSection}
-                    selectedItem={selectedItem}
-                    onItemChange={setSelectedItem}
-                  />
-                )}
-
-                <div className="flex gap-4 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl">
-                  <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-amber-800 dark:text-amber-200">
-                    <strong>Warning:</strong> This action cannot be undone. The student's progress will be permanently
-                    reset for the selected scope.
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsResetDialogOpen(false)}
-                  className="min-w-[100px] cursor-pointer"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleConfirmReset}
-                  disabled={!isFormValid() || resetProgressMutation.isPending}
-                  className="min-w-[120px] shadow-lg cursor-pointer"
-                >
-                  {resetProgressMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                      Resetting...
-                    </>
-                  ) : (
-                    "Reset Progress"
+                        )}
+                    </div>
                   )}
-                </Button>
+
+                </div>
+
+                <div className="mt-4">
+                  {/* {hasCompletedCourse ? (
+    <div className="p-4 rounded-lg bg-green-50 border border-green-200 text-green-700 font-medium">
+      🎉 Student has completed the course
+    </div>
+  ) : (
+    <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 font-medium">
+      ⏳ Course is still in progress
+    </div>
+  )} */}
+                </div>
+
+                {/* Current Learning Position */}
+                <div className="space-y-2 p-4 rounded-lg border border-border bg-muted/20">
+                  <h4 className="text-sm font-semibold text-muted-foreground">
+                    Current Learning Position
+                  </h4>
+
+                  {pathError && (
+                    <div className="text-sm text-destructive">
+                      <p>Failed to load current progress</p>
+                      <p className="text-xs mt-1">Error: {pathError.message || 'Unknown error'}</p>
+                    </div>
+                  )}
+
+                  {!currentPath && !pathError && (
+                    <p className="text-sm text-muted-foreground">
+                      Progress not started yet
+                    </p>
+                  )}
+
+                  {currentPath && currentPath.message && (
+                    <div className="text-sm text-muted-foreground">
+                      <p>{currentPath.message}</p>
+                    </div>
+                  )}
+
+                  {currentPath && currentPath.module && (
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                      <span className="px-2 py-1 rounded bg-blue-100 text-blue-700">
+                        {currentPath.module.name}
+                      </span>
+
+                      <span className="text-muted-foreground">›</span>
+
+                      <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-700">
+                        {currentPath.section.name}
+                      </span>
+
+                      <span className="text-muted-foreground">›</span>
+
+                      <span className="px-2 py-1 rounded bg-purple-100 text-purple-700">
+                        {currentPath.item.name}
+                      </span>
+
+                      <span className="ml-2 text-xs px-2 py-0.5 rounded border">
+                        {currentPath.item.type}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+
+                {/* Course Structure */}
+                <div className="space-y-4">
+                  {enrollmentTab === "ACTIVE" && (
+                    <div className="flex justify-between">
+                      <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                handleResetProgress({
+                                  id: selectedUser.id,
+                                  name: `${selectedUser.name || ""}`.trim() || "Unknown User",
+                                  email: selectedUser.email,
+                                  enrolledDate: selectedUser.enrolledDate,
+                                  progress: 0,
+                                })
+                              }
+                              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all duration-200 cursor-pointer"
+                              disabled={resetProgressMutation.isPending || selectedUser.isDeleted}
+                            >
+                              {resetProgressMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-4 w-4 mr-2" />
+                              )}
+                              Reset
+                            </Button>
+                          </TooltipTrigger>
+
+                          <TooltipContent>
+                            <p>Reset student progress</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                handleRecalculateProgress({
+                                  id: selectedUser.id,
+                                  name: `${selectedUser.name || ""}`.trim() || "Unknown User",
+                                  email: selectedUser.email,
+                                  enrolledDate: selectedUser.enrolledDate,
+                                  progress: 0,
+                                })
+                              }
+                              className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+                              disabled={
+                                unenrollMutation.isPending ||
+                                user?.email == selectedUser.email ||
+                                selectedUser.isDeleted
+                              }
+                            >
+                              {unenrollMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-4 w-4 mr-2" />
+                              )}
+                              Recalculate
+                            </Button>
+                          </TooltipTrigger>
+
+                          <TooltipContent>Recalculate student progress</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  )}
+                  {/* add the code here */}
+                  <h3 className="text-lg font-semibold text-foreground">Course Structure</h3>
+                  <div className="space-y-2 max-h-96 overflow-y-auto border border-border rounded-lg p-4">
+                    {getAvailableModules().map((module: any) => (
+                      <div key={module.moduleId} className="space-y-2">
+                        {/* Module */}
+                        <div
+                          className="flex items-center gap-2 p-3 bg-muted/20 rounded-lg cursor-pointer hover:bg-muted/30 transition-colors"
+                          onClick={() => toggleModule(module.moduleId)}
+                        >
+                          {expandedModules.has(module.moduleId) ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                          <BookOpen className="h-5 w-5 text-blue-600" />
+                          <span className="font-semibold text-foreground flex-1">{module.name}</span>
+
+                          {/* Module completion count */}
+                          {(() => {
+                            // Find progress for this module from the API response
+                            const moduleProgress = userModuleProgress?.modules?.find(
+                              (m: any) => m.moduleId === module.moduleId
+                            );
+
+                            if (moduleProgress) {
+                              const { totalItems, completedItems } = moduleProgress;
+                              const completedText = totalItems > 0
+                                ? `${completedItems}/${totalItems} completed`
+                                : 'No items';
+
+                              return (
+                                <span className="text-xs ml-auto text-muted-foreground">
+                                  {completedText}
+                                </span>
+                              );
+                            }
+
+                            let totalItems = 0;
+                            module.sections?.forEach((section: any) => {
+                              totalItems += section.itemCount || 0;
+                            });
+
+                            const loadingText = moduleProgressLoading
+                              ? `${totalItems} items (loading...)`
+                              : `${totalItems} items`;
+
+                            return (
+                              <span className="text-xs ml-auto text-muted-foreground">
+                                {loadingText}
+                              </span>
+                            );
+                          })()}
+                        </div>
+
+                        {/* Sections */}
+                        {expandedModules.has(module.moduleId) && (
+                          <div className="ml-6 space-y-2">
+                            {module.sections?.map((section: any) => (
+                              <div key={section.sectionId} className="space-y-2">
+                                <div
+                                  className="flex items-center gap-2 p-2 bg-muted/10 rounded-lg cursor-pointer hover:bg-muted/20 transition-colors"
+                                  onClick={() => toggleSection(section.sectionId)}
+                                >
+                                  {expandedSections.has(section.sectionId) ? (
+                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                  )}
+                                  <FileText className="h-4 w-4 text-emerald-600" />
+                                  <span className="font-medium text-foreground">{section.name}</span>
+                                </div>
+
+                                {/* Items */}
+                                {expandedSections.has(section.sectionId) && (
+                                  <SectionItems
+                                    versionId={versionId!}
+                                    moduleId={module.moduleId}
+                                    sectionId={section.sectionId}
+                                    selectedViewItem={selectedViewItem}
+                                    onItemSelect={(itemId, itemType, itemName) => {
+                                      setSelectedViewItem(itemId)
+                                      setSelectedViewItemType(itemType)
+                                      setSelectedViewItemName(itemName)
+                                    }}
+                                    getItemIcon={getItemIcon}
+                                  />
+                                )}
+                              </div>
+                            )) || (
+                                <p className="text-sm text-muted-foreground ml-6">
+                                  No sections in this module
+                                </p>
+                              )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+
+                {/* Item Details Display */}
+                {selectedViewItem && (
+                  <div className="space-y-4">
+                    {selectedViewItemType?.toUpperCase() === 'QUIZ' ? (
+                      <QuizSubmissionDisplay
+                        userId={selectedUser.id}
+                        quizId={selectedViewItem}
+                        itemName={selectedViewItemName}
+                      />
+                    ) : (
+                      <WatchTimeDisplay
+                        userId={selectedUser.id}
+                        itemId={selectedViewItem}
+                        courseId={courseId!}
+                        courseVersionId={versionId}
+                        itemName={selectedViewItemName}
+                        itemType={selectedViewItemType}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {!selectedViewItem && (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Select an item from the course structure above to view details.</p>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        )}
-        {totalPages > 1 && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalDocuments={totalDocuments}
-            onPageChange={handlePageChange}
-          />
-        )}
+          )}
 
-        {/* Bulk Unenroll Confirmation Dialog */}
-        {isBulkUnenrollDialogOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center mb-0">
-            <div
-              className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
-              onClick={() => setIsBulkUnenrollDialogOpen(false)}
-            />
-            <div className="relative bg-card border border-border rounded-2xl shadow-2xl sm:max-w-lg max-[425px]:w-[90vw] w-full mx-4 sm:p-10 p-5 space-y-8 animate-in fade-in-0 zoom-in-95 duration-300 cursor-default">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl md:text-2xl font-bold text-card-foreground">Bulk Unenroll</h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsBulkUnenrollDialogOpen(false)}
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-full cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+          {/* Enhanced Remove Student Confirmation Modal */}
+          {isRemoveDialogOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center mb-0">
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
+                onClick={() => setIsRemoveDialogOpen(false)}
+              />
+              <div className="relative bg-card border border-border rounded-2xl shadow-2xl sm:max-w-lg max-[425px]:w-[90vw] w-full mx-4 sm:p-10 p-5 space-y-8 animate-in fade-in-0 zoom-in-95 duration-300 cursor-default">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl md:text-2xl font-bold text-card-foreground">Remove Student</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsRemoveDialogOpen(false)}
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-full cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="space-y-8">
+                  <p className="text-lg text-card-foreground">
+                    Want to remove <strong className="text-primary">{userToRemove?.name}</strong> from{" "}
+                    <strong className="text-primary">
+                      {course.name} ({version.version})
+                    </strong>
+                    ?
+                  </p>
+
+                  <div className="flex gap-4 p-6 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl">
+                    <div><AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" /></div>
+                    <div className="text-sm text-red-800 dark:text-red-200">
+                      <strong>Warning:</strong> This action cannot be undone. The student will lose access to the course
+                      version and all their progress data.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsRemoveDialogOpen(false)}
+                    className="min-w-[100px] cursor-pointer"
+                  >
+                    No, Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={confirmRemoveStudent}
+                    disabled={unenrollMutation.isPending}
+                    className="min-w-[100px] shadow-lg cursor-pointer"
+                  >
+                    {unenrollMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Removing...
+                      </>
+                    ) : (
+                      "Yes, Remove"
+                    )}
+                  </Button>
+                </div>
               </div>
+            </div>
+          )}
 
-              <div className="space-y-4">
-                <p className="text-lg text-card-foreground">
-                  Are you sure you want to unenroll <strong>{selectedUsers.size}</strong> students?
-                </p>
-                <div className="flex gap-4 p-6 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl">
+          {isRecalculateProgressOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center mb-0">
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
+                onClick={() => setIsRecalculateProgressOpen(false)}
+              />
+              <div className="relative bg-card border border-border rounded-2xl shadow-2xl sm:max-w-lg max-[425px]:w-[90vw] w-full mx-4 sm:p-10 p-5 space-y-8 animate-in fade-in-0 zoom-in-95 duration-300 cursor-default">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl md:text-2xl font-bold text-card-foreground">Recalculate Progress</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsRecalculateProgressOpen(false)}
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-full cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="space-y-8">
+                  <p className="text-lg text-card-foreground">
+                    Want to Recalculate progress of <strong className="text-primary">{userToRecalculate?.name}</strong>
+                    ?
+                  </p>
+
+                  {/* <div className="flex gap-4 p-6 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl">
                   <div><AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" /></div>
                   <div className="text-sm text-red-800 dark:text-red-200">
-                    <strong>Warning:</strong> This action cannot be undone. Selected students will lose access to the course version and all their progress data.
+                    <strong>Warning:</strong> This action cannot be undone. The student will lose access to the course
+                    version and all their progress data.
                   </div>
+                </div> */}
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsRecalculateProgressOpen(false)}
+                    className="min-w-[100px] cursor-pointer"
+                  >
+                    No, Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={confirmReCalculateProgress}
+                    disabled={recalculateMutation.isPending}
+                    className="min-w-[100px] shadow-lg cursor-pointer"
+                  >
+                    {unenrollMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Recalculating...
+                      </>
+                    ) : (
+                      "Yes, Recalculate"
+                    )}
+                  </Button>
                 </div>
               </div>
+            </div>
+          )}
 
-              <div className="flex justify-end gap-3 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsBulkUnenrollDialogOpen(false)}
-                  className="min-w-[100px] cursor-pointer"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={confirmBulkUnenroll}
-                  className="min-w-[100px] shadow-lg cursor-pointer"
-                >
-                  Unenroll Selected
-                </Button>
+          {/* Enhanced Reset Progress Modal */}
+          {isResetDialogOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center mb-0">
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
+                onClick={() => setIsResetDialogOpen(false)}
+              />
+              <div className="relative bg-card border border-border rounded-2xl shadow-2xl max-w-3xl w-full mx-4 sm:p-8 p-4 space-y-6 max-h-[90vh] overflow-y-auto animate-in fade-in-0 zoom-in-95 duration-300 cursor-default">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl md:text-2xl font-bold text-card-foreground">Reset Student Progress</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsResetDialogOpen(false)}
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-full cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {selectedUser && (
+                  <div className="flex items-center gap-4 p-6 bg-gradient-to-r from-muted/30 to-muted/10 rounded-xl border border-border">
+                    <Avatar className="h-12 w-12 border-2 border-primary/20 shadow-md">
+                      <AvatarImage src={selectedUser.avatar || "/placeholder.svg"} alt={selectedUser.name} />
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground font-bold">
+                        {selectedUser.name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-card-foreground truncate text-lg">{selectedUser.name}</p>
+                      <p className="text-muted-foreground truncate">{selectedUser.email}</p>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-muted-foreground">
+                  Choose the scope of progress reset for this student in{" "}
+                  <strong>
+                    {course.name} ({version.version})
+                  </strong>
+                  . This action cannot be undone.
+                </p>
+
+                <div className="space-y-8 flex justify-around flex-wrap">
+                  <div className="space-y-3">
+                    <Label htmlFor="reset-scope" className="text-sm font-bold text-foreground">
+                      Reset Scope
+                    </Label>
+                    <Select value={resetScope} onValueChange={(value: any) => setResetScope(value)}>
+                      <SelectTrigger className="h-16 border-border bg-card text-card-foreground cursor-pointer">
+                        <SelectValue placeholder="Select reset scope" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-card border-border cursor-pointer">
+                        <SelectItem value="course" className="cursor-pointer">
+                          <div className="flex items-center sm:gap-3 gap-1 py-3 sm:px-2">
+                            <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                            <div>
+                              <div className="font-semibold">Entire Course Version</div>
+                              <div className="text-xs text-muted-foreground">Reset all progress in this version</div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="module" className="cursor-pointer" >
+                          <div className="flex items-center sm:gap-3 gap-1 py-3 sm:px-2">
+                            <List className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                            <div>
+                              <div className="font-semibold">Specific Module</div>
+                              <div className="text-xs text-muted-foreground">Reset module progress</div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="section" className="cursor-pointer" >
+                          <div className="flex items-center sm:gap-3 gap-1 py-3 sm:px-2">
+                            <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                            <div>
+                              <div className="font-semibold">Specific Section</div>
+                              <div className="text-xs text-muted-foreground">Reset section progress</div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="item" className="cursor-pointer" >
+                          <div className="flex items-center sm:gap-3 gap-1 py-3 sm:px-2">
+                            <Play className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                            <div>
+                              <div className="font-semibold">Specific Item</div>
+                              <div className="text-xs text-muted-foreground">Reset single item</div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {(resetScope === "module" || resetScope === "section" || resetScope === "item") && (
+                    <div className="space-y-3">
+                      <Label htmlFor="module" className="text-sm font-bold text-foreground">
+                        Module
+                      </Label>
+                      <Select value={selectedModule} onValueChange={setSelectedModule}>
+                        <SelectTrigger className="h-16 border-border bg-card text-card-foreground cursor-pointer">
+                          <SelectValue placeholder="Select module" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-card border-border cursor-pointer">
+                          {getAvailableModules().map((module: any) => (
+                            <SelectItem key={module.moduleId} value={module.moduleId} className="cursor-pointer">
+                              <div className="py-2">
+                                <div className="font-semibold">{module.name}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {module.sections?.length || 0} sections
+                                </div>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {(resetScope === "section" || resetScope === "item") && selectedModule && (
+                    <div className="space-y-3">
+                      <Label htmlFor="section" className="text-sm font-bold text-foreground">
+                        Section
+                      </Label>
+                      <Select value={selectedSection} onValueChange={setSelectedSection}>
+                        <SelectTrigger className="h-16 border-border bg-card text-card-foreground cursor-pointer">
+                          <SelectValue placeholder="Select section" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-card border-border cursor-pointer">
+                          {getAvailableSections().map((section: any) => (
+                            <SelectItem key={section.sectionId} value={section.sectionId} className="cursor-pointer">
+                              <div className="py-2">
+                                <div className="font-semibold">{section.name}</div>
+                                <div className="text-xs text-muted-foreground">Section in selected module</div>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {resetScope === "item" && selectedModule && selectedSection && (
+                    <ItemSelector
+                      versionId={versionId!}
+                      moduleId={selectedModule}
+                      sectionId={selectedSection}
+                      selectedItem={selectedItem}
+                      onItemChange={setSelectedItem}
+                    />
+                  )}
+
+                  <div className="flex gap-4 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl">
+                    <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-800 dark:text-amber-200">
+                      <strong>Warning:</strong> This action cannot be undone. The student's progress will be permanently
+                      reset for the selected scope.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsResetDialogOpen(false)}
+                    className="min-w-[100px] cursor-pointer"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleConfirmReset}
+                    disabled={!isFormValid() || resetProgressMutation.isPending}
+                    className="min-w-[120px] shadow-lg cursor-pointer"
+                  >
+                    {resetProgressMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        Resetting...
+                      </>
+                    ) : (
+                      "Reset Progress"
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+          {totalPages > 1 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalDocuments={totalDocuments}
+              onPageChange={handlePageChange}
+            />
+          )}
+
+          {/* Bulk Unenroll Confirmation Dialog */}
+          {isBulkUnenrollDialogOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center mb-0">
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
+                onClick={() => setIsBulkUnenrollDialogOpen(false)}
+              />
+              <div className="relative bg-card border border-border rounded-2xl shadow-2xl sm:max-w-lg max-[425px]:w-[90vw] w-full mx-4 sm:p-10 p-5 space-y-8 animate-in fade-in-0 zoom-in-95 duration-300 cursor-default">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl md:text-2xl font-bold text-card-foreground">Bulk Unenroll</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsBulkUnenrollDialogOpen(false)}
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground rounded-full cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-lg text-card-foreground">
+                    Are you sure you want to unenroll <strong>{selectedUsers.size}</strong> students?
+                  </p>
+                  <div className="flex gap-4 p-6 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl">
+                    <div><AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" /></div>
+                    <div className="text-sm text-red-800 dark:text-red-200">
+                      <strong>Warning:</strong> This action cannot be undone. Selected students will lose access to the course version and all their progress data.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsBulkUnenrollDialogOpen(false)}
+                    className="min-w-[100px] cursor-pointer"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={confirmBulkUnenroll}
+                    className="min-w-[100px] shadow-lg cursor-pointer"
+                  >
+                    Unenroll Selected
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Time Slots Modal */}
+      <TimeSlotsModal
+        isOpen={isTimeSlotsModalOpen}
+        onClose={() => setIsTimeSlotsModalOpen(false)}
+        courseId={courseId || ""}
+        courseVersionId={versionId || ""}
+      />
+    </>
   )
 }
 
@@ -1864,16 +2049,28 @@ function EnrollmentsTable({
   onSelectAll,
   toggleSelectionMode,
   handleBulkUnenroll,
+  setIsTimeSlotsModalOpen,
+  timeSlotsData,
+  getStudentTimeSlot,
 }: any) {
   const isInactiveTab = enrollmentTab === "INACTIVE"
+
+  // Helper function to check if student is already assigned to any timeslot
+  const isStudentAlreadyAssigned = (studentId: string) => {
+    if (!timeSlotsData?.slots) return false;
+
+    return timeSlotsData.slots.some((slot: any) =>
+      slot.studentIds?.includes(studentId)
+    );
+  };
 
   return (
     <Card className="border-0 shadow-lg overflow-hidden">
       <CardHeader className="pb-4 bg-gradient-to-r from-card to-muted/20 flex items-center justify-between lg:flex-nowrap flex-wrap">
         <CardTitle className="text-xl font-medium text-card-foreground">
           {isInactiveTab
-            ? `Inactive Students (${totalDocuments})`
-            : `Active Students (${totalDocuments})`}
+            ? `Inactive Students `
+            : `Active Students `}
         </CardTitle>
 
         {/* SAME header functionality for both tabs */}
@@ -1891,6 +2088,18 @@ function EnrollmentsTable({
               <FileDown className="h-4 w-4" />
             )}
             <span>{isLoadingQuizScores ? "Exporting..." : "Export Quiz Scores"}</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setIsTimeSlotsModalOpen(true);
+            }}
+            className="flex items-center gap-2"
+          >
+            <Clock className="h-4 w-4" />
+            <span>Configure Time Slots</span>
           </Button>
 
           {/* Select Students Button - Only for Active Students */}
@@ -1956,9 +2165,11 @@ function EnrollmentsTable({
                       <Checkbox
                         checked={
                           studentEnrollments.length > 0 &&
-                          studentEnrollments.every((e: any) =>
-                            selectedUsers.has(e.user?._id || e.user?.id)
-                          )
+                          studentEnrollments.every((e: any) => {
+                            const studentId = e.user?._id || e.user?.id;
+                            const isAssigned = isStudentAlreadyAssigned(studentId);
+                            return isAssigned || selectedUsers.has(studentId);
+                          })
                         }
                         onCheckedChange={onSelectAll}
                         aria-label="Select all"
@@ -1972,12 +2183,14 @@ function EnrollmentsTable({
                         { key: "enrollmentDate", label: "Enrolled", className: "w-[120px]" },
                         { key: "unenrolledAt", label: "Unenrolled", className: "w-[120px]" },
                         { key: "progress", label: "Completion Percentage", className: "w-[200px]" },
+                        { key: "assignedTimeSlot", label: "Assigned Time Slot", className: "w-[200px]" },
                         { key: "scoreObtained", label: "Score obtained", className: "w-[200px]" },
                       ]
                       : [
                         { key: "name", label: "Student", className: "pl-6 w-[300px]" },
                         { key: "enrollmentDate", label: "Enrolled", className: "w-[120px]" },
                         { key: "progress", label: "Completion Percentage", className: "w-[200px]" },
+                        { key: "assignedTimeSlot", label: "Assigned Time Slot", className: "w-[200px]" },
                         { key: "scoreObtained", label: "Score obtained", className: "w-[200px]" },
                       ];
                     return columns.map(({ key, label, className }) => (
@@ -2042,9 +2255,11 @@ function EnrollmentsTable({
                       <Checkbox
                         checked={
                           studentEnrollments.length > 0 &&
-                          studentEnrollments.every((e: any) =>
-                            selectedUsers.has(e.user?._id || e.user?.id)
-                          )
+                          studentEnrollments.every((e: any) => {
+                            const studentId = e.user?._id || e.user?.id;
+                            const isAssigned = isStudentAlreadyAssigned(studentId);
+                            return isAssigned || selectedUsers.has(studentId);
+                          })
                         }
                         onCheckedChange={onSelectAll}
                         aria-label="Select all"
@@ -2058,12 +2273,14 @@ function EnrollmentsTable({
                         { key: "enrollmentDate", label: "Enrolled", className: "w-[120px]" },
                         { key: "unenrolledAt", label: "Unenrolled", className: "w-[120px]" },
                         { key: "progress", label: "Completion Percentage", className: "w-[200px]" },
+                        { key: "assignedTimeSlot", label: "Assigned Time Slot", className: "w-[200px]" },
                         { key: "scoreObtained", label: "Score obtained", className: "w-[200px]" },
                       ]
                       : [
                         { key: "name", label: "Student", className: "pl-6 w-[300px]" },
                         { key: "enrollmentDate", label: "Enrolled", className: "w-[120px]" },
                         { key: "progress", label: "Completion Percentage", className: "w-[200px]" },
+                        { key: "assignedTimeSlot", label: "Assigned Time Slot", className: "w-[200px]" },
                         { key: "scoreObtained", label: "Score obtained", className: "w-[200px]" },
                       ];
                     return columns.map(({ key, label, className }) => (
@@ -2126,13 +2343,39 @@ function EnrollmentsTable({
                       {/* Selection Checkbox */}
                       {isSelectionMode && (
                         <TableCell className="pl-6 w-[50px]">
-                          <Checkbox
-                            checked={selectedUsers.has(enrollment.user?._id || enrollment.user?.id)}
-                            onCheckedChange={(checked) =>
-                              onSelectUser(enrollment.user?._id || enrollment.user?.id, checked === true)
-                            }
-                            aria-label={`Select ${enrollment.user?.name}`}
-                          />
+                          <div className="relative">
+                            {isStudentAlreadyAssigned(enrollment.user?._id || enrollment.user?.id) ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div>
+                                    <Checkbox
+                                      checked={selectedUsers.has(enrollment.user?._id || enrollment.user?.id)}
+                                      onCheckedChange={(checked) =>
+                                        onSelectUser(enrollment.user?._id || enrollment.user?.id, checked === true)
+                                      }
+                                      disabled={isStudentAlreadyAssigned(enrollment.user?._id || enrollment.user?.id)}
+                                      aria-label={`Select ${enrollment.user?.name}`}
+                                      className="opacity-50 cursor-not-allowed"
+                                    />
+                                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full flex items-center justify-center">
+                                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                                    </div>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Student already assigned to a time slot</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <Checkbox
+                                checked={selectedUsers.has(enrollment.user?._id || enrollment.user?.id)}
+                                onCheckedChange={(checked) =>
+                                  onSelectUser(enrollment.user?._id || enrollment.user?.id, checked === true)
+                                }
+                                aria-label={`Select ${enrollment.user?.name}`}
+                              />
+                            )}
+                          </div>
                         </TableCell>
                       )}
 
@@ -2199,6 +2442,26 @@ function EnrollmentsTable({
                       {/* Progress */}
                       <TableCell className="py-6">
                         <EnrollmentProgress progress={enrollment.progress || 0} />
+                      </TableCell>
+
+                      {/* Assigned Time Slot */}
+                      <TableCell className="py-6">
+                        <div className="text-muted-foreground font-medium">
+                          {(() => {
+                            const timeSlot = getStudentTimeSlot(enrollment.user?._id || enrollment.user?.id);
+                            if (timeSlot && timeSlot.from && timeSlot.to) {
+                              const formatTime = (time: string) => {
+                                const [hour, minute] = time.split(':');
+                                const h = parseInt(hour);
+                                const suffix = h >= 12 ? 'PM' : 'AM';
+                                const displayHour = h > 12 ? h - 12 : h === 0 ? 12 : h;
+                                return `${displayHour}:${minute} ${suffix}`;
+                              };
+                              return `${formatTime(timeSlot.from)} - ${formatTime(timeSlot.to)}`;
+                            }
+                            return "Not Assigned";
+                          })()}
+                        </div>
                       </TableCell>
 
                       {/* Score obtained */}

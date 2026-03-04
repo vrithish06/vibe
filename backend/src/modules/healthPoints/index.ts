@@ -2,6 +2,7 @@
 import { Container, ContainerModule } from 'inversify';
 import { healthPointsContainerModule } from './container.js';
 import { HealthPointsController } from './controllers/HealthPointsController.js';
+import { StudentHealthPointsController } from './controllers/StudentHealthPointsController.js';
 import { sharedContainerModule } from '#root/container.js';
 import { InversifyAdapter } from '#root/inversify-adapter.js';
 import { authorizationChecker, HttpErrorHandler } from '#shared/index.js';
@@ -17,7 +18,8 @@ export const healthPointsContainerModules: ContainerModule[] = [
 ];
 
 export const healthPointsModuleControllers: Function[] = [
-    HealthPointsController
+    HealthPointsController,
+    StudentHealthPointsController
 ];
 
 export async function setupHealthPointsContainer(): Promise<void> {

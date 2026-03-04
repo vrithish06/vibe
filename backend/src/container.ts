@@ -8,11 +8,11 @@ import {
 import { GLOBAL_TYPES } from './types.js';
 import { dbConfig } from './config/db.js';
 import { CourseRepository } from '#shared/database/providers/mongo/repositories/CourseRepository.js';
-import { HealthPointsRepository } from '#shared/database/providers/mongo/repositories/HealthPointsRepository.js';
 import { FirebaseAuthService } from './modules/auth/services/FirebaseAuthService.js';
 import { ProgressService } from './modules/users/services/ProgressService.js';
 import { EnrollmentService } from './modules/users/services/EnrollmentService.js';
 import { ActivityRepository } from '#shared/database/providers/mongo/repositories/ActivityRepository.js';
+import { HealthPointsRepository } from '#shared/database/providers/mongo/repositories/HealthPointsRepository.js';
 
 
 

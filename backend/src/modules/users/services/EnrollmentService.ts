@@ -489,6 +489,7 @@ export class EnrollmentService extends BaseService {
             role: enr.role,
             status: enr.status,
             enrollmentDate: new Date(enr.enrollmentDate),
+            assignedTimeSlot: enr.assignedTimeSlot,
             course: this.filterCourseVersions(enr.course, enrolledVersionIds),
             percentCompleted: enr.percentCompleted || 0,
             moduleNumber: enr.moduleNumber,
@@ -511,6 +512,7 @@ export class EnrollmentService extends BaseService {
       role: enr.role,
       status: enr.status,
       enrollmentDate: new Date(enr.enrollmentDate),
+      assignedTimeSlot: enr.assignedTimeSlot,
       course: this.filterCourseVersions(enr.course, enrolledVersionIds),
     }));
   }
@@ -646,6 +648,7 @@ export class EnrollmentService extends BaseService {
             course: this.filterCourseVersions(enr.course, enrolledVersionIds),
             // courseVersion: enr.courseVersion,
             percentCompleted: enr.percentCompleted || 0,
+            assignedTimeSlot: enr.assignedTimeSlot,
             moduleNumber: enr.moduleNumber,
             sectionNumber: enr.sectionNumber,
             itemType: enr.itemType,
@@ -862,7 +865,6 @@ export class EnrollmentService extends BaseService {
 
     // 3. Get all user IDs from enrollments
     const userIds = enrollments.map(e => e.userId);
-    console.log('🔍 User IDs for quiz lookup:', enrollments);
 
     // 4. Batch fetch quiz submissions for all users
     const quizSubmissions =
@@ -1363,5 +1365,208 @@ export class EnrollmentService extends BaseService {
     const updatedCount = results.reduce((sum, r) => sum + r.updatedCount, 0);
 
     return { totalCount, updatedCount };
+  }
+
+  async getModuleProgressForUser(
+    userId: string,
+    courseId: string,
+    versionId: string,
+  ): Promise<Array<{
+    moduleId: string;
+    moduleName: string;
+    totalItems: number;
+    completedItems: number;
+  }>> {
+    // Delegate to ProgressService which already has working module progress logic
+    return await this.progressService.getModuleWiseProgress(
+      userId,
+      courseId,
+      versionId,
+    );
+  }
+
+  /**
+   * Update student's assigned time slot
+   */
+  async updateStudentTimeSlot(
+    userId: string,
+    courseId: string,
+    courseVersionId: string,
+    timeSlot: { from: string; to: string },
+    session?: ClientSession,
+  ): Promise<boolean> {
+    const execute = async (session: ClientSession) => {
+      const enrollment = await this.enrollmentRepo.findActiveEnrollment(
+        userId,
+        courseId,
+        courseVersionId,
+        session,
+      );
+
+      if (!enrollment) {
+        throw new NotFoundError('Enrollment not found for this student.');
+      }
+
+      const result = await this.enrollmentRepo.updateEnrollmentTimeSlot(
+        enrollment._id?.toString(),
+        timeSlot,
+        session,
+      );
+
+      return !!result;
+    };
+
+    return session ? execute(session) : this._withTransaction(execute);
+  }
+
+  /**
+   * Remove assigned time slot from student enrollment
+   */
+  async removeStudentTimeSlot(
+    userId: string,
+    courseId: string,
+    courseVersionId: string,
+    session?: ClientSession,
+  ): Promise<boolean> {
+    const execute = async (session: ClientSession) => {
+      const enrollment = await this.enrollmentRepo.findActiveEnrollment(
+        userId,
+        courseId,
+        courseVersionId,
+        session,
+      );
+
+      if (!enrollment) {
+        throw new NotFoundError('Enrollment not found for this student.');
+      }
+
+      const result = await this.enrollmentRepo.removeEnrollmentTimeSlot(
+        enrollment._id?.toString(),
+        session,
+      );
+
+      return !!result;
+    };
+
+    return session ? execute(session) : this._withTransaction(execute);
+  }
+
+  /**
+   * Update time slots for multiple students (when time slot is modified)
+   */
+  async updateTimeSlotForStudents(
+    userIds: string[],
+    courseId: string,
+    courseVersionId: string,
+    oldTimeSlot: { from: string; to: string },
+    newTimeSlot: { from: string; to: string },
+    session?: ClientSession,
+  ): Promise<boolean> {
+    const execute = async (session: ClientSession) => {
+      const results = await Promise.all(
+        userIds.map(async (userId) => {
+          try {
+            // Find enrollment with the old time slot
+            const enrollment = await this.enrollmentRepo.findActiveEnrollment(
+              userId,
+              courseId,
+              courseVersionId,
+              session,
+            );
+
+            if (!enrollment || !enrollment.assignedTimeSlot) {
+              return false;
+            }
+
+            // Check if this enrollment has the old time slot
+            const hasOldTimeSlot =
+              enrollment.assignedTimeSlot.from === oldTimeSlot.from &&
+              enrollment.assignedTimeSlot.to === oldTimeSlot.to;
+
+            if (!hasOldTimeSlot) {
+              return false;
+            }
+
+            // Update to new time slot
+            const result = await this.enrollmentRepo.updateEnrollmentTimeSlot(
+              enrollment._id?.toString(),
+              newTimeSlot,
+              session,
+            );
+
+            return !!result;
+          } catch (error) {
+            console.error(`Failed to update time slot for user ${userId}:`, error);
+            return false;
+          }
+        })
+      );
+
+      // Return true if all updates succeeded
+      return results.every(result => result);
+    };
+
+    return session ? execute(session) : this._withTransaction(execute);
+  }
+
+  /**
+   * Find enrollments by assigned time slot
+   */
+  async findEnrollmentsByTimeSlot(
+    courseId: string,
+    courseVersionId: string,
+    timeSlot: { from: string; to: string },
+    session?: ClientSession,
+  ): Promise<IEnrollment[]> {
+    const execute = async (session: ClientSession) => {
+      const enrollments = await this.enrollmentRepo.findEnrollmentsByTimeSlot(
+        courseId,
+        courseVersionId,
+        timeSlot,
+        session,
+      );
+
+      return enrollments;
+    };
+
+    return session ? execute(session) : this._withTransaction(execute);
+  }
+
+  /**
+   * Update time slot (for modification scenarios)
+   */
+  async updateTimeSlot(
+    courseId: string,
+    courseVersionId: string,
+    oldTimeSlot: { from: string; to: string },
+    newTimeSlot: { from: string; to: string },
+    session?: ClientSession,
+  ): Promise<boolean> {
+    const execute = async (session: ClientSession) => {
+      // Find all enrollments with the old time slot
+      const enrollments = await this.findEnrollmentsByTimeSlot(
+        courseId,
+        courseVersionId,
+        oldTimeSlot,
+        session,
+      );
+
+      // Update each enrollment to the new time slot
+      const results = await Promise.all(
+        enrollments.map(async (enrollment) => {
+          const result = await this.enrollmentRepo.updateEnrollmentTimeSlot(
+            enrollment._id?.toString(),
+            newTimeSlot,
+            session,
+          );
+          return !!result;
+        })
+      );
+
+      // Return true if all updates succeeded
+      return results.every(result => result);
+    };
+
+    return session ? execute(session) : this._withTransaction(execute);
   }
 }

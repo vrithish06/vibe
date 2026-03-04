@@ -165,6 +165,9 @@ export default function CoursePage() {
   // ✅ Add the missing ref declaration
   const itemContainerRef = useRef<ItemContainerRef>(null);
 
+  // ✅ Track completed item IDs to prevent duplicate start/stop requests
+  const completedItemIdsRef = useRef<Set<string>>(new Set<string>());
+
   // Ref for autoscroll to selected sidebar item
   const selectedItemRef = useRef<HTMLButtonElement | null>(null);
 
@@ -203,7 +206,7 @@ export default function CoursePage() {
   // ---- Activities ----
   const { data: activitiesData, isLoading: activitiesLoading } = useActivitiesForStudent(VERSION_ID);
   const activities: any[] = Array.isArray(activitiesData) ? activitiesData : [];
-  
+
   // Debug: Log activities for troubleshooting
   useEffect(() => {
     if (activities.length > 0) {
@@ -214,10 +217,10 @@ export default function CoursePage() {
       })));
     }
   }, [activities]);
-  
+
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const selectedActivity = activities.find((a: any) => getIdStr(a._id) === selectedActivityId) || null;
-  
+
   // Debug: Log selected activity
   useEffect(() => {
     console.log('📍 Selected Activity ID:', selectedActivityId);
@@ -228,7 +231,7 @@ export default function CoursePage() {
   // State for the self-declaration confirmation dialog
   const [showDeclarationDialog, setShowDeclarationDialog] = useState(false);
   const [isDeclarationPending, setIsDeclarationPending] = useState(false);
-  
+
   // Mutation for submitting activities
   const submitActivityMutation = useSubmitActivity();
 
@@ -1540,6 +1543,8 @@ export default function CoursePage() {
                             <SidebarMenuButton
                               onClick={() => toggleModule(moduleId)}
                               isActive={isCurrentModule}
+                              aria-expanded={isModuleExpanded}
+                              data-state={isModuleExpanded ? 'open' : 'closed'}
                               className="group relative h-10 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/15 data-[state=active]:to-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-sm"
                             >
                               <ChevronRight
@@ -2062,6 +2067,7 @@ export default function CoursePage() {
                         item={currentItem}
                         onNext={handleNext}
                         isProgressUpdating={isNavigatingToNext}
+                        completedItemIdsRef={completedItemIdsRef}
                       />
                     ) : (
 
@@ -2087,6 +2093,8 @@ export default function CoursePage() {
                         courseId={COURSE_ID}
                         versionId={VERSION_ID}
                         sectionId={sectionId}
+                        completedItemIdsRef={completedItemIdsRef}
+                        nextItem={findNextItem() || { itemId: '' }}
                       />
                     )}
 
@@ -2130,21 +2138,14 @@ export default function CoursePage() {
                             onClick={async () => {
                               setIsDeclarationPending(true);
                               try {
-                                // Debug: log token being used for submit
-                                try {
-                                  const _tok = localStorage.getItem('firebase-auth-token');
-                                  // eslint-disable-next-line no-console
-                                  console.log('🔐 submit token:', _tok);
-                                } catch (e) {}
-
                                 // Submit activity and award HP
                                 const result = await submitActivityMutation.mutateAsync(getIdStr(selectedActivity._id));
-                                
+
                                 // Mark locally as acknowledged
                                 setAcknowledgedActivities(prev => ({ ...prev, [getIdStr(selectedActivity._id)]: true }));
-                                
+
                                 setShowDeclarationDialog(false);
-                                
+
                                 // Show success with HP awarded
                                 toast.success(
                                   `🎉 Activity completed! You earned ${result.hpAwarded || 0} HP!`,

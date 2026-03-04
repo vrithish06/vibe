@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, ChangeEvent, use } from "react";
 import * as Papa from 'papaparse';
-import { useAddQuestionBankToQuiz, useAddQuestionToBank, useCreateQuestion, useCreateQuestionBank, userParseCSVtoItems, useUpdateItemOptional } from '@/hooks/hooks';
-import { Download, LogOut, Upload, UserRoundCheck } from 'lucide-react';
+import { useAddQuestionBankToQuiz, useAddQuestionToBank, useCreateQuestion, useCreateQuestionBank, useOverallVideoAnalytics, userParseCSVtoItems, useUpdateItemOptional, useVideoUserAnalytics } from '@/hooks/hooks';
+import { BarChart3, Download, LogOut, Upload, UserRoundCheck, Video, Clock, PlayCircle, Users, Search, LockOpen, Lock } from 'lucide-react';
 import { useHideItem } from '@/hooks/hooks';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 const MAX_DESCRIPTION_LENGTH = 1000;
 
@@ -33,7 +34,10 @@ import {
   MessageSquare,
   Eye,
   EyeOff,
-  Loader2
+  Loader2,
+  ArrowUp,
+  ArrowDown,
+  Pencil
 } from "lucide-react";
 
 import { useNavigate } from "@tanstack/react-router";
@@ -144,6 +148,10 @@ function TeacherCourseContent() {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const invitesRef = useRef<HTMLDivElement | null>(null);
+  const [videoTab, setVideoTab] = useState("video");
+  const [isReorderEnabled,setIsReorderEnabled]=useState(false);
+
+
 
   const handleLogout = () => {
     logout();
@@ -155,6 +163,11 @@ function TeacherCourseContent() {
   // Use correct keys for course/version IDs
   const courseId = currentCourse?.courseId;
   const versionId = currentCourse?.versionId;
+
+
+
+
+
   useEffect(() => {
     const items: BreadcrumbItem[] = [];
     items.push({
@@ -341,6 +354,59 @@ function TeacherCourseContent() {
     shouldFetchItem ? versionId : '',
     shouldFetchItem ? selectedEntity?.data?._id : ''
   );
+
+  const [videoAnalyticsPage, setVideoAnalyticsPage] = useState(1);
+  const [videoAnalyticsLimit, setVideoAnalyticsLimit] = useState(12);
+  const [videoAnalyticsSearch, setVideoAnalyticsSearch] = useState("");
+  const [debouncedVideoAnalyticsSearch, setDebouncedVideoAnalyticsSearch] = useState("");
+  const [videoAnalyticsSortBy, setVideoAnalyticsSortBy] = useState<'name' | 'views' | 'watchHours'>('name');
+  const [videoAnalyticsSortOrder, setVideoAnalyticsSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedVideoAnalyticsSearch(videoAnalyticsSearch);
+      setVideoAnalyticsPage(1);
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [videoAnalyticsSearch]);
+
+  const {
+    data: overallAnalytics,
+    isLoading: overallLoading,
+    error: overallError,
+    refetch: refetchOverall,
+  } = useOverallVideoAnalytics(courseId!, versionId!, selectedEntity?.data?._id);
+
+  const videoUserAnalyticsQuery = useVideoUserAnalytics(
+    courseId!,
+    versionId!,
+    selectedEntity?.data?._id,
+    {
+      page: videoAnalyticsPage,
+      limit: videoAnalyticsLimit,
+      search: debouncedVideoAnalyticsSearch,
+      sortBy: videoAnalyticsSortBy,
+      sortOrder: videoAnalyticsSortOrder,
+    }
+  );
+
+  const {
+    data: userAnalyticsData,
+    totalDocuments: userAnalyticsTotalDocs,
+    totalPages: userAnalyticsTotalPages,
+    page,
+    limit,
+  } = videoUserAnalyticsQuery.data ?? {};
+
+  const {
+    isLoading: usersLoading,
+    error: usersError,
+    refetch: refetchUsers,
+  } = videoUserAnalyticsQuery;
+
   // Sync controlled state with selectedItemData for PROJECT edit
   useEffect(() => {
     if (selectedEntity?.type === 'item' && selectedEntity.data.type === 'PROJECT') {
@@ -1527,112 +1593,132 @@ function TeacherCourseContent() {
         />
       )} */}
       {/* {isDesktopSidebarVisible && ( */}
-      <SidebarResizablePanel
-        defaultSize={20}
-        minSize={20}
-        maxSize={50}
-      // className={`${isMobileSidebarOpen ? 'fixed inset-y-0 left-0 z-50 w-[280px]' : 'hidden md:block'}`}
-      >
-        {/* sidebar content */}
-        <div className="h-full overflow-hidden border-r border-border/40 bg-sidebar/50">
-          <Sidebar variant="sidebar" collapsible="none" className="h-screen w-full">
-            <SidebarHeader>
-              <div className="flex items-center gap-3 px-3 py-2">
-                <BookOpen className="text-primary" />
-                <div>
-                  <h1 className="text-base font-bold">Vibe (Teacher)</h1>
-                  <p className="text-xs text-muted-foreground">Course Editor</p>
+        <SidebarResizablePanel
+          defaultSize={20}
+          minSize={20}
+          maxSize={50}
+          // className={`${isMobileSidebarOpen ? 'fixed inset-y-0 left-0 z-50 w-[280px]' : 'hidden md:block'}`}
+        >
+          {/* sidebar content */}
+          <div className="h-full overflow-hidden border-r border-border/40 bg-sidebar/50">
+            <Sidebar variant="sidebar" collapsible="none" className="h-screen w-full">
+              <SidebarHeader>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-3 px-3 py-2">
+                    <BookOpen className="text-primary" />
+                    <div>
+                      <h1 className="text-base font-bold">Vibe (Teacher)</h1>
+                      <p className="text-xs text-muted-foreground">Course Editor</p>
+                    </div>
+                  </div>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant={isReorderEnabled ? "default" : "ghost"}
+                          className={`h-7 w-7 transition-all duration-200 ${isReorderEnabled ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                          onClick={() => setIsReorderEnabled((prev) => !prev)}
+                        >
+                          {isReorderEnabled?<LockOpen className="h-4 w-4" />:<Lock className="h-4 w-4" />}
+                          <span className="sr-only">Toggle Reorder</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        {isReorderEnabled ? "Disable Reordering" : "Enable Reordering"}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
-              </div>
-              <Separator className="opacity-50" />
-            </SidebarHeader>
+                <Separator className="opacity-50" />
+              </SidebarHeader>
 
             <SidebarContent
               className="bg-card/50 pl-2"
 
-            >
-              <ScrollArea className="flex-1">
-                <Reorder.Group
-                  axis="y"
-                  onReorder={(newOrder) => {
-                    pendingOrder.current = newOrder;
-                  }}
-                  values={initialModules}
-                >
-                  <SidebarMenu className="space-y-2 text-sm pr-1 pt-2">
-                    {initialModules
-                      .slice()
-                      .sort((a: any, b: any) => a.order.localeCompare(b.order))
-                      .map((module: any) => (
-                        <SidebarMenuItem key={module.moduleId}>
-                          <Reorder.Item
-                            key={module.moduleId}
-                            value={module}
-                            as="div"
-                            drag
-                            className={module.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
-                            whileDrag={{ scale: 1.02 }}
-                            onDragEnd={() => {
-                              setInitialModules(pendingOrder.current);
-                              handleMoveModule(module.moduleId, versionId);
-                            }}
-                          >
-                            <Button className="absolute top-0 right-0" size="icon" variant="ghost" onClick={(e) => handleHideModule(module.moduleId, !module.isHidden)} disabled={hidingModuleId === module.moduleId}>
-                              {hidingModuleId === module.moduleId ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : !module.isHidden ? (
-                                <Eye className="h-4 w-4" />
-                              ) : (
-                                <EyeOff className="h-4 w-4" />
-                              )}
-                              <span className="sr-only">Hide Module</span>
-                            </Button>
-                            <SidebarMenuButton
-                              onClick={() => {
-                                toggleModule(module.moduleId);
-                                setSelectedEntity({ type: "module", data: module });
-                                setIsEditingModule(false);
-                                setOriginalModuleData({
-                                  name: module.name,
-                                  description: module.description || ""
-                                });
+              >
+                <ScrollArea className="flex-1">
+                  <Reorder.Group
+                    axis="y"
+                    onReorder={(newOrder) => {
+                      pendingOrder.current = newOrder;
+                    }}
+                    values={initialModules}
+                  >
+                    <SidebarMenu className="space-y-2 text-sm pr-1 pt-2">
+                      {initialModules
+                        .slice()
+                        .sort((a: any, b: any) => a.order.localeCompare(b.order))
+                        .map((module: any) => (
+                          <SidebarMenuItem key={module.moduleId}>
+                            <Reorder.Item
+                              key={module.moduleId}
+                              value={module}
+                              as="div"
+                              drag={isReorderEnabled}
+                              className={module.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
+                              whileDrag={{ scale: 1.02 }}
+                              onDragEnd={() => {
+                                setInitialModules(pendingOrder.current);
+                                handleMoveModule(module.moduleId, versionId);
                               }}
                             >
-                              <ChevronRight
-                                className={`h-3.5 w-3.5 transition-transform ${expandedModules[module.moduleId] ? "rotate-90" : ""
-                                  }`}
-                              />
-                              <span className="ml-2 max-w-[35ch] truncate" title={module.name}>{module.name}</span>
-                            </SidebarMenuButton>
-                          </Reorder.Item>
+                              <Button className="absolute top-0 right-0" size="icon" variant="ghost" onClick={(e) => handleHideModule(module.moduleId, !module.isHidden)} disabled={hidingModuleId === module.moduleId}>
+                                {hidingModuleId === module.moduleId ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : !module.isHidden ? (
+                                  <Eye className="h-4 w-4" />
+                                ) : (
+                                  <EyeOff className="h-4 w-4" />
+                                )}
+                                <span className="sr-only">Hide Module</span>
+                              </Button>
+                              <SidebarMenuButton
+                                onClick={() => {
+                                  toggleModule(module.moduleId);
+                                  setSelectedEntity({ type: "module", data: module });
+                                  setIsEditingModule(false);
+                                  setOriginalModuleData({
+                                    name: module.name,
+                                    description: module.description || ""
+                                  });
+                                }}
+                              >
+                                <ChevronRight
+                                  className={`h-3.5 w-3.5 transition-transform ${expandedModules[module.moduleId] ? "rotate-90" : ""
+                                    }`}
+                                />
+                                <span className="ml-2 max-w-[35ch] truncate" title={module.name}>{module.name}</span>
+                              </SidebarMenuButton>
+                            </Reorder.Item>
 
-                          {expandedModules[module.moduleId] && (
-                            <Reorder.Group
-                              axis="y"
-                              values={module.sections}
-                              onReorder={(newSectionOrder) => {
-                                pendingOrder.current[module.moduleId] = newSectionOrder;
-                              }}
-                            >
-                              <SidebarMenuSub className="ml-2">
-                                {module.sections?.map((section: any) => (
-                                  <Reorder.Item
-                                    key={section.sectionId}
-                                    value={section}
-                                    drag
-                                    className={section.isHidden || module.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
-                                    whileDrag={{ scale: 1.02 }}
-                                    onDragEnd={() => {
-                                      setInitialModules((prev) =>
-                                        prev.map((mod) =>
-                                          mod.moduleId === module.moduleId
-                                            ? { ...mod, sections: pendingOrder.current[module.moduleId] }
-                                            : mod
-                                        )
-                                      );
-                                      handleMoveSection(module.moduleId, section.sectionId, versionId);
-                                    }}
-                                  >
+                            {expandedModules[module.moduleId] && (
+                              <Reorder.Group
+                                axis="y"
+                                values={module.sections}
+                                onReorder={(newSectionOrder) => {
+                                  pendingOrder.current[module.moduleId] = newSectionOrder;
+                                }}
+                              >
+                                <SidebarMenuSub className="ml-2">
+                                  {module.sections?.map((section: any) => (
+                                    <Reorder.Item
+                                      key={section.sectionId}
+                                      value={section}
+                                      drag={isReorderEnabled}
+                                      className={section.isHidden || module.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
+                                      whileDrag={{ scale: 1.02 }}
+                                      onDragEnd={() => {
+                                        setInitialModules((prev) =>
+                                          prev.map((mod) =>
+                                            mod.moduleId === module.moduleId
+                                              ? { ...mod, sections: pendingOrder.current[module.moduleId] }
+                                              : mod
+                                          )
+                                        );
+                                        handleMoveSection(module.moduleId, section.sectionId, versionId);
+                                      }}
+                                    >
 
                                     <div
                                       data-slot="sidebar-menu-sub-item"
@@ -1673,30 +1759,30 @@ function TeacherCourseContent() {
                                         <span className="sr-only">Hide Section</span>
                                       </Button>
 
-                                      {expandedSections[section.sectionId] && (
-                                        <Reorder.Group
-                                          axis="y"
-                                          values={sectionItems[section.sectionId] || []}
-                                          onReorder={(newItemOrder) => {
-                                            pendingOrderItems.current[section.sectionId] = newItemOrder;
-                                          }}
-                                        >
-                                          <SidebarMenuSub className="ml-4 space-y-1 pt-1">
-                                            {itemsLoading && activeSectionInfo?.sectionId === section.sectionId ? (
-                                              <div className="flex items-center justify-center py-4">
-                                                <Loader />
-                                              </div>
-                                            ) : (sectionItems[section.sectionId] || [])
-                                              .slice()
-                                              .sort((a: any, b: any) => a.order.localeCompare(b.order))
-                                              .map((item: any) => (
-                                                <Reorder.Item
-                                                  key={item._id}
-                                                  value={item}
-                                                  drag
-                                                  className={section.isHidden || module.isHidden || item.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
-                                                  whileDrag={{ scale: 1.02 }}
-                                                  onDragEnd={() => {
+                                        {expandedSections[section.sectionId] && (
+                                          <Reorder.Group
+                                            axis="y"
+                                            values={sectionItems[section.sectionId] || []}
+                                            onReorder={(newItemOrder) => {
+                                              pendingOrderItems.current[section.sectionId] = newItemOrder;
+                                            }}
+                                          >
+                                            <SidebarMenuSub className="ml-4 space-y-1 pt-1">
+                                              {itemsLoading && activeSectionInfo?.sectionId === section.sectionId ? (
+                                                <div className="flex items-center justify-center py-4">
+                                                  <Loader />
+                                                </div>
+                                              ) : (sectionItems[section.sectionId] || [])
+                                                .slice()
+                                                .sort((a: any, b: any) => a.order.localeCompare(b.order))
+                                                .map((item: any) => (
+                                                  <Reorder.Item
+                                                    key={item._id}
+                                                    value={item}
+                                                    drag={isReorderEnabled}
+                                                    className={section.isHidden || module.isHidden || item.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
+                                                    whileDrag={{ scale: 1.02 }}
+                                                    onDragEnd={() => {
 
                                                     setSectionItems((prev) => {
                                                       const items = pendingOrderItems.current[section.sectionId] || prev[section.sectionId];
@@ -2351,7 +2437,7 @@ function TeacherCourseContent() {
                     variant="outline"
                     className="bg-primary/10 border-primary/20 text-primary px-3 py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap"
                   >
-                    Version: {(versionData as any)?.version || (versionData as any)?.name || 'Unknown'}
+                    Version: {(versionData as any)?.version || (versionData as any)?.name || 'Unknown'} a
                   </Badge>
                 </div>
               )}
@@ -2492,9 +2578,37 @@ function TeacherCourseContent() {
                     {/* Header with breadcrumb */}
                     <div className="mb-6 pb-4 border-b border-slate-200 dark:border-gray-700">
                       <div className="flex items-center justify-between mb-2">
-                        <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-slate-900 dark:text-gray-100">
-                          {selectedEntity.data?.name}
-                        </h2>
+                        <div className="flex items-center gap-2">
+                          {/* Pencil icon to update module*/}
+                          {(selectedEntity.type === "module" || selectedEntity.type === "section") && !isEditingModule && !isEditingSection && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                if (selectedEntity.type === "module") {
+                                  setIsEditingModule(true);
+                                  setOriginalModuleData({
+                                    name: selectedEntity.data.name,
+                                    description: selectedEntity.data.description || ""
+                                  });
+                                } else {
+                                  setIsEditingSection(true);
+                                  setOriginalSectionData({
+                                    name: selectedEntity.data.name,
+                                    description: selectedEntity.data.description || ""
+                                  });
+                                }
+                              }}
+                              className="h-8 w-8 -ml-2"
+                            >
+                              <Pencil className="h-4 w-4" />
+                              <span className="sr-only">Edit {selectedEntity.type}</span>
+                            </Button>
+                          )}
+                          <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-slate-900 dark:text-gray-100">
+                            {selectedEntity.data?.name}
+                          </h2>
+                        </div>
                         <div className="flex items-center gap-2">
                           {selectedEntity.type === "item" && (
                             // <div className="items-center gap-2 bg-muted/40 px-2 py-1 rounded-md border text-sm">
@@ -2605,7 +2719,13 @@ function TeacherCourseContent() {
                       </div>
                       <div className="text-sm text-slate-500 dark:text-gray-400 flex items-center gap-2">
                         <BookOpen className="h-4 w-4" />
-                        <span>Course � Module � {selectedEntity.type}</span>
+                        <span className="flex items-center gap-1">
+                          Course
+                          <ChevronRight size={16} />
+                          Module
+                          <ChevronRight size={16} />
+                          {selectedEntity.type}
+                        </span>
                       </div>
                     </div>
 
@@ -2739,7 +2859,9 @@ function TeacherCourseContent() {
                         </>
                       )}
                       <div className="flex items-center gap-2">
-                        {(selectedEntity.type === "module" || selectedEntity.type === "section") && (
+                        {(selectedEntity.type === "module" || selectedEntity.type === "section") &&
+                        (isEditingModule || isEditingSection) &&
+                         (
                           <Button
                             onClick={() => {
                               const moduleName = selectedEntity.data.name?.trim();
@@ -2855,11 +2977,17 @@ function TeacherCourseContent() {
                                 });
                               }
                             }}
-                            className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 transition-all duration-300"
+                            variant={isEditingModule || isEditingSection ? "default" : "ghost"}
+                            size={isEditingModule || isEditingSection ? "default" : "icon"}
+                            className={isEditingModule || isEditingSection ? 
+                              "bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 transition-all duration-300" : "h-8 w-8"}
                           >
-                            {selectedEntity.type === "module"
-                              ? (isEditingModule ? 'Save Changes' : `Update ${selectedEntity.type}`)
-                              : (isEditingSection ? 'Save Changes' : `Update ${selectedEntity.type}`)}
+                             {isEditingModule || isEditingSection ? (
+                              'Save Changes'
+                            ) : (
+                              <Pencil className="h-4 w-4" />
+                            )}
+                            <span className="sr-only">Edit {selectedEntity.type}</span>
                           </Button>
                         )}
 
@@ -2934,72 +3062,182 @@ function TeacherCourseContent() {
 
 
 
-                      {selectedEntity.type === "item" && selectedEntity.data.type === "VIDEO" && (
-
-                        <VideoModal
-                          isLoading={isItemLoading}
-                          selectedItemName={selectedItem.name}
-                          action={isEditingItem ? "edit" : "view"}
-                          item={selectedItemData?.item}
-                          onClose={() => setIsEditingItem(false)}
-                          onSave={video => {
-                            const formattedVideo = {
-                              ...video,
-                              type: "VIDEO",
-                              details: {
-                                ...video.details,
-                                startTime: video.details.startTime,
-                                endTime: video.details.endTime,
-                              }
-                            };
-                            if (
-                              selectedEntity.parentIds?.moduleId &&
-                              selectedEntity.parentIds?.sectionId &&
-                              selectedEntity.data?._id &&
-                              versionId
-                            ) {
-                              updateVideoAsync({
-                                params: {
-                                  path: {
-                                    versionId,
-                                    itemId: selectedEntity.data._id,
+                      {/* {selectedEntity.type === "item" && selectedEntity.data.type === "VIDEO" && (
+                        <>
+                        
+                          <VideoModal
+                            isLoading={isItemLoading}
+                            selectedItemName={selectedItem.name}
+                            action={isEditingItem ? "edit" : "view"}
+                            item={selectedItemData?.item}
+                            onClose={() => setIsEditingItem(false)}
+                            onSave={video => {
+                              const formattedVideo = {
+                                ...video,
+                                type: "VIDEO",
+                                details: {
+                                  ...video.details,
+                                  startTime: video.details.startTime,
+                                  endTime: video.details.endTime,
+                                }
+                              };
+                              if (
+                                selectedEntity.parentIds?.moduleId &&
+                                selectedEntity.parentIds?.sectionId &&
+                                selectedEntity.data?._id &&
+                                versionId
+                              ) {
+                                updateVideoAsync({
+                                  params: {
+                                    path: {
+                                      versionId,
+                                      itemId: selectedEntity.data._id,
+                                    }
+                                  },
+                                  body: formattedVideo,
+                                }).then((res) => {
+                                  refetchVersion();
+                                  if (shouldFetchItems) {
+                                    refetchItems();
                                   }
-                                },
-                                body: formattedVideo,
-                              }).then((res) => {
-                                refetchVersion();
-                                if (shouldFetchItems) {
-                                  refetchItems();
-                                }
-                                refetchItem();
-                              });
-                              toast.success("Video details saved successfully");
-                              setIsEditingItem(false);
-                            }
-                          }}
-                          onDelete={() => {
-                            if (
-                              selectedEntity.parentIds?.sectionId &&
-                              selectedEntity.data?._id
-                            ) {
+                                  refetchItem();
+                                });
+                                toast.success("Video details saved successfully");
+                                setIsEditingItem(false);
+                              }
+                            }}
+                            onDelete={() => {
+                              if (
+                                selectedEntity.parentIds?.sectionId &&
+                                selectedEntity.data?._id
+                              ) {
 
-                              deleteItemAsync({
-                                params: { path: { itemsGroupId: selectedEntity.parentIds?.itemsGroupId || "", itemId: selectedEntity.data._id } }
-                              }).then((res) => {
-                                refetchVersion();
-                                if (shouldFetchItems) {
-                                  refetchItems();
-                                }
-                                refetchItem();
-                              });
-                              setSelectedEntity(null);
-                              setIsEditingItem(false);
+                                deleteItemAsync({
+                                  params: { path: { itemsGroupId: selectedEntity.parentIds?.itemsGroupId || "", itemId: selectedEntity.data._id } }
+                                }).then((res) => {
+                                  refetchVersion();
+                                  if (shouldFetchItems) {
+                                    refetchItems();
+                                  }
+                                  refetchItem();
+                                });
+                                setSelectedEntity(null);
+                                setIsEditingItem(false);
 
-                            }
-                          }}
-                          onEdit={() => setIsEditingItem(true)}
-                        />
+                              }
+                            }}
+                            onEdit={() => setIsEditingItem(true)}
+                          />
+                        </>
+                      )} */}
+                      {selectedEntity.type === "item" && selectedEntity.data.type === "VIDEO" && (
+                        <Tabs value={videoTab} onValueChange={setVideoTab} className=" mb-4">
+
+                          <TabsList className=" overflow-x-auto no-scrollbar">
+
+                            <TabsTrigger value="video" className="flex items-center gap-2 cursor-pointer">
+                              <Video className="h-4 w-4" />
+                              Video
+                            </TabsTrigger>
+
+                            <TabsTrigger value="analytics" className="flex items-center gap-2 cursor-pointer">
+                              <BarChart3 className="h-4 w-4" />
+                              Analytics
+                            </TabsTrigger>
+
+                          </TabsList>
+
+                          {videoTab === "video" && (
+                            <VideoModal
+                              isLoading={isItemLoading}
+                              selectedItemName={selectedItem.name}
+                              action={isEditingItem ? "edit" : "view"}
+                              item={selectedItemData?.item}
+                              onClose={() => setIsEditingItem(false)}
+                              onSave={video => {
+                                const formattedVideo = {
+                                  ...video,
+                                  type: "VIDEO",
+                                  details: {
+                                    ...video.details,
+                                    startTime: video.details.startTime,
+                                    endTime: video.details.endTime,
+                                  }
+                                };
+
+                                if (
+                                  selectedEntity.parentIds?.moduleId &&
+                                  selectedEntity.parentIds?.sectionId &&
+                                  selectedEntity.data?._id &&
+                                  versionId
+                                ) {
+                                  updateVideoAsync({
+                                    params: {
+                                      path: {
+                                        versionId,
+                                        itemId: selectedEntity.data._id,
+                                      }
+                                    },
+                                    body: formattedVideo,
+                                  }).then(() => {
+                                    refetchVersion();
+                                    shouldFetchItems && refetchItems();
+                                    refetchItem();
+                                  });
+
+                                  toast.success("Video details saved successfully");
+                                  setIsEditingItem(false);
+                                }
+                              }}
+
+                              onDelete={() => {
+                                if (
+                                  selectedEntity.parentIds?.sectionId &&
+                                  selectedEntity.data?._id
+                                ) {
+                                  deleteItemAsync({
+                                    params: {
+                                      path: {
+                                        itemsGroupId: selectedEntity.parentIds?.itemsGroupId || "",
+                                        itemId: selectedEntity.data._id
+                                      }
+                                    }
+                                  }).then(() => {
+                                    refetchVersion();
+                                    shouldFetchItems && refetchItems();
+                                    refetchItem();
+                                  });
+
+                                  setSelectedEntity(null);
+                                  setIsEditingItem(false);
+                                }
+                              }}
+
+                              onEdit={() => setIsEditingItem(true)}
+                            />
+                          )}
+
+                          {videoTab === "analytics" && (
+                            <div className="mt-4">
+                              <p className="text-sm text-muted-foreground">
+                                <UserAnalytics users={userAnalyticsData || []} overallAnalytics={overallAnalytics} currentPage={videoAnalyticsPage} limit={videoAnalyticsLimit} search={videoAnalyticsSearch} onSearchChange={(v) => {
+                                  setVideoAnalyticsSearch(v);
+                                  setVideoAnalyticsPage(1);
+                                }} sortBy={videoAnalyticsSortBy} sortOrder={videoAnalyticsSortOrder} onSortChange={(field) => {
+                                  if (videoAnalyticsSortBy === field) {
+                                    setVideoAnalyticsSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                                  } else {
+                                    setVideoAnalyticsSortBy(field);
+                                    setVideoAnalyticsSortOrder('asc');
+                                  }
+                                }} onPageChange={setVideoAnalyticsPage} isLoading={overallLoading || usersLoading} totalDocuments={userAnalyticsTotalDocs || 0} totalPages={userAnalyticsTotalPages || 0} />
+                              </p>
+                            </div>
+                          )}
+
+                        </Tabs>
                       )}
+
                       {/* <CreateArticle/> */}
                       {selectedEntity.type === "item" && selectedEntity.data.type === "QUIZ" && courseId && versionId && (
                         <EnhancedQuizEditor
@@ -3318,7 +3556,323 @@ export function useStatusToasts({
 
 // 4. ADD A SIMPLE FEEDBACK EDITOR COMPONENT (Hello World for now)
 
+export interface VideoUserAnalytics {
+  firstName: string;
+  email: string;
+  userId: string;
+  viewCount: number;
+  totalWatchTime: number;
+}
 
+export interface VideoUserAnalyticsResponse {
+  data: VideoUserAnalytics[];
+  totalDocuments: number;
+  totalPages: number;
+  page: number;
+  limit: number;
+}
+
+export interface VideoOverallAnalytics {
+  videoId: string;
+  videoDuration: number | string;
+  totalViews: number;
+  totalWatchHours: number;
+  averageViewsPerUser: number;
+  averageWatchHoursPerUser: number;
+}
+
+export type UserAnalyticsProps = {
+  users: VideoUserAnalytics[] | null;
+  overallAnalytics?: VideoOverallAnalytics | null;
+
+  search: string;
+  onSearchChange: (value: string) => void;
+
+  currentPage: number;
+  limit: number;
+  totalDocuments: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+
+  sortBy: 'name' | 'views' | 'watchHours';
+  sortOrder: 'asc' | 'desc';
+  onSortChange: (field: 'name' | 'views' | 'watchHours') => void;
+
+  isLoading?: boolean;
+};
+
+export function UserAnalytics({
+  users,
+  overallAnalytics,
+  search,
+  onSearchChange,
+  currentPage,
+  limit,
+  totalDocuments,
+  totalPages,
+  onPageChange,
+  sortBy,
+  sortOrder,
+  onSortChange,
+  isLoading,
+}: UserAnalyticsProps) {
+  const safeUsers = users ?? [];
+
+  const totalViewsOnPage = useMemo(
+    () => safeUsers.reduce((sum, u) => sum + (u.viewCount || 0), 0),
+    [safeUsers]
+  );
+
+  const totalWatchHoursOnPage = useMemo(
+    () => safeUsers.reduce((sum, u) => sum + (u.watchHours || 0), 0),
+    [safeUsers]
+  );
+
+  const avgViewsPerUserOnPage = safeUsers.length ? totalViewsOnPage / safeUsers.length : 0;
+
+
+
+  return (
+    <div className="w-full space-y-4 p-4">
+      {/* Header */}
+      <div className="space-y-1">
+        <h1 className="text-xl font-semibold tracking-tight">User Analytics</h1>
+        <p className="text-sm text-muted-foreground">Per-student engagement for this video.</p>
+      </div>
+
+      {/* Overall Analytics (compact) */}
+      {overallAnalytics && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
+          {/* Duration */}
+          <Card className="bg-blue-50 border-blue-100">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-medium text-blue-900">
+                Duration
+              </CardTitle>
+              <Clock className="h-4 w-4 text-blue-700" />
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="text-lg font-semibold text-blue-950">
+                {overallAnalytics.videoDuration}s
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Total Views */}
+          <Card className="bg-green-50 border-green-100">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-medium text-green-900">
+                Total Views
+              </CardTitle>
+              <Eye className="h-4 w-4 text-green-700" />
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="text-lg font-semibold text-green-950">
+                {overallAnalytics.totalViews.toLocaleString()}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Watch Hours */}
+          <Card className="bg-purple-50 border-purple-100">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-medium text-purple-900">
+                Watch Hours
+              </CardTitle>
+              <PlayCircle className="h-4 w-4 text-purple-700" />
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="text-lg font-semibold text-purple-950">
+                {overallAnalytics.totalWatchHours?.toFixed(1)}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Avg Watch / User */}
+          <Card className="bg-orange-50 border-orange-100">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-medium text-orange-900">
+                Avg Watch / User
+              </CardTitle>
+              <Users className="h-4 w-4 text-orange-700" />
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="text-lg font-semibold text-orange-950">
+                {overallAnalytics.averageWatchHoursPerUser?.toFixed(1)}h
+              </div>
+            </CardContent>
+          </Card>
+
+        </div>
+      )}
+
+      {/* Search + Stats */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="w-full sm:max-w-sm relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+
+            <Input
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search by name or email..."
+              className="h-9 pl-9"
+            />
+          </div>
+
+
+        </div>
+
+
+      </div>
+
+      {/* Table */}
+      <Card className="bg-muted/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Users</CardTitle>
+          <CardDescription className="text-xs">
+            Showing{" "}
+            {totalDocuments === 0 ? 0 : (currentPage - 1) * limit + 1}–
+            {Math.min(currentPage * limit, totalDocuments)} of {totalDocuments}
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent>
+          <div className="overflow-x-auto min-h-[400px]">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border bg-muted/30">
+                  {[
+                    { key: "name", label: "Student", className: "pl-6 w-[320px]", sortable: true },
+                    { key: "views", label: "Views", className: "w-[120px] text-right", sortable: true },
+                    { key: "watchHours", label: "Watch (hrs)", className: "w-[160px] text-right", sortable: true },
+                    { key: "engagement", label: "Engagement", className: "w-[160px] text-center", sortable: false },
+                  ].map(({ key, label, className, sortable }) => (
+                    <TableHead
+                      key={key}
+                      className={`font-bold text-foreground select-none ${sortable ? 'cursor-pointer' : ''} ${className}`}
+                      onClick={() => sortable && onSortChange(key as 'name' | 'views' | 'watchHours')}
+                    >
+                      <span className="flex items-center gap-1">
+                        {label}
+                        {sortable && sortBy === key && (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp size={16} className="text-foreground" />
+                          ) : (
+                            <ArrowDown size={16} className="text-foreground" />
+                          )
+                        )}
+                      </span>
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {/* Loading state */}
+                {isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-16 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        <span className="text-muted-foreground">
+                          Loading user analytics…
+                        </span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+
+                {/* Empty state */}
+                {!isLoading && safeUsers.length === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={4}
+                      className="py-10 text-center text-sm text-muted-foreground"
+                    >
+                      No users found for the current search.
+                    </TableCell>
+                  </TableRow>
+                )}
+
+                {/* Data rows */}
+                {!isLoading &&
+                  safeUsers.map((user) => {
+                    const engagement =
+                      user.viewCount > avgViewsPerUserOnPage
+                        ? "high"
+                        : user.viewCount > avgViewsPerUserOnPage * 0.5
+                          ? "medium"
+                          : "low";
+
+                    const badgeClass = {
+                      high: "bg-primary/15 text-primary",
+                      medium: "bg-muted text-foreground",
+                      low: "bg-muted/60 text-muted-foreground",
+                    }[engagement];
+
+                    return (
+                      <TableRow
+                        key={user.userId}
+                        className="border-b border-border/60 hover:bg-muted/30"
+                      >
+                        {/* Name + Email (common pattern) */}
+                        <TableCell className="pl-6">
+                          <div className="flex items-center gap-3">
+                            {/* Avatar */}
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                              {user.firstName?.charAt(0)?.toUpperCase()}
+                            </div>
+
+                            {/* Name + Email */}
+                            <div className="flex flex-col">
+                              <span className="font-medium text-foreground leading-tight">
+                                {user.firstName}
+                              </span>
+                              <span className="text-xs text-muted-foreground leading-tight">
+                                {user.email}
+                              </span>
+                            </div>
+                          </div>
+                        </TableCell>
+
+
+                        <TableCell className="w-[120px] text-left font-medium tabular-nums">
+                          {user.viewCount.toLocaleString()}
+                        </TableCell>
+
+                        <TableCell className="w-[120px] text-left font-medium tabular-nums">
+                          {user.totalWatchTime}
+                        </TableCell>
+
+                        <TableCell className="text-left">
+                          <Badge className={badgeClass}>
+                            {engagement.charAt(0).toUpperCase() + engagement.slice(1)}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+              </TableBody>
+            </Table>
+          </div>
+
+
+
+          {/* Pagination (buttons should use bg-primary inside your Pagination component) */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalDocuments={totalDocuments}
+            onPageChange={onPageChange}
+            className="mt-4"
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 
 
