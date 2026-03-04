@@ -185,44 +185,53 @@ export class ActivityService {
             throw new ForbiddenError('This activity is not available for submission');
         }
 
-        // Calculate health points reward
+        // Calculate and award health points (best-effort — don't fail submission if HP errors)
         const courseId = activity.courseId?.toString() || (activity.courseId as any as ObjectId).toString();
-        let hpToAward = 0;
+        let hpAwarded = 0;
 
         if (activity.rewardValue != null && activity.rewardValue > 0) {
-            if (activity.rewardType === 'PERCENTAGE') {
-                // For percentage, we award it as a percentage bonus
-                hpToAward = activity.rewardValue;
-            } else {
-                // For absolute, we need to determine current HP to calculate equivalent percentage
-                // Get current HP to calculate percentage
-                const currentHP = await this.hpService.getHealthPoints(user.userId, courseId, session);
-                if (currentHP && currentHP.currentHP > 0) {
-                    hpToAward = (activity.rewardValue / currentHP.currentHP) * 100;
-                } else {
-                    // If no current HP, treat as 100 for calculation (or return fixed percentage)
-                    hpToAward = activity.rewardValue > 0 ? 10 : 0;
-                }
-            }
-        }
+            try {
+                let percentageChange = 0;
 
-        // Award health points
-        if (hpToAward > 0) {
-            await this.hpService.addEvent(
-                user.userId,
-                courseId,
-                'BONUS',
-                hpToAward,
-                `Activity completion: ${activity.title}`,
-                user.userId,
-                session
-            );
+                if (activity.rewardType === 'PERCENTAGE') {
+                    // Direct percentage reward
+                    percentageChange = activity.rewardValue;
+                } else {
+                    // ABSOLUTE reward: convert HP units to percentage of current HP
+                    const currentRecord = await this.hpService.getHealthPoints(user.userId, courseId, session);
+                    const currentHP = currentRecord?.currentHP ?? 1000; // default 1000 if not initialized
+                    if (currentHP > 0) {
+                        percentageChange = (activity.rewardValue / currentHP) * 100;
+                    } else {
+                        // HP is 0 — treat reward value directly as a percentage point
+                        percentageChange = activity.rewardValue;
+                    }
+                }
+
+                if (percentageChange > 0) {
+                    const result = await this.hpService.addEvent(
+                        user.userId,
+                        courseId,
+                        'BONUS',
+                        percentageChange,
+                        `Activity completion: ${activity.title}`,
+                        user.userId,
+                        session
+                    );
+                    // hpAwarded = actual HP gained (new - old)
+                    const gained = (result?.currentHP ?? 0) - (result?.previousHP ?? (result?.currentHP ?? 0));
+                    hpAwarded = Math.round(Math.abs(gained) * 100) / 100 || activity.rewardValue;
+                }
+            } catch (hpError: any) {
+                console.error(`[ActivityService] HP award failed for user ${user.userId} on activity ${activityId}:`, hpError?.message || hpError);
+                // HP error is non-fatal — activity is still counted as submitted
+            }
         }
 
         return {
             success: true,
             message: `Activity "${activity.title}" submitted successfully!`,
-            hpAwarded: Math.round(hpToAward * 100) / 100,
+            hpAwarded,
             activity: {
                 id: activity._id,
                 title: activity.title,
