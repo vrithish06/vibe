@@ -781,7 +781,7 @@ export interface TranscriptExplanations {
 }
 
 // Activity Creation System
-export type ActivityType = 'ASSIGNMENT_PROOF' | 'VIBE_MILESTONE' | 'EXTERNAL_IMPORT';
+export type ActivityType = 'ASSIGNMENT' | 'VIBE_MILESTONE' | 'EXTERNAL_IMPORT';
 export type RewardType = 'ABSOLUTE' | 'PERCENTAGE';
 export type PenaltyType = 'ABSOLUTE' | 'PERCENTAGE';
 export type SubmissionMode = 'IN_PLATFORM' | 'EXTERNAL_LINK' | 'CSV_IMPORT';
