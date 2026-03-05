@@ -129,7 +129,7 @@ export class HealthPointsRepository {
         userId: string | ObjectId,
         courseId: string | ObjectId,
         type: HPEventType,
-        percentageChange: number,
+        pointsChange: number,
         reason: string,
         createdBy: string | ObjectId,
         session?: ClientSession
@@ -139,7 +139,7 @@ export class HealthPointsRepository {
             userId: new ObjectId(userId),
             courseId: new ObjectId(courseId),
             type,
-            percentageChange,
+            pointsChange,
             reason,
             createdAt: new Date(),
             createdBy: new ObjectId(createdBy)
@@ -196,7 +196,7 @@ export class HealthPointsRepository {
                 $project: {
                     _id: { $toString: '$_id' },
                     type: 1,
-                    percentageChange: 1,
+                    pointsChange: { $ifNull: ['$pointsChange', '$percentageChange'] },
                     reason: 1,
                     createdAt: 1,
                     createdByName: 1,

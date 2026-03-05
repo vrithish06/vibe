@@ -31,7 +31,7 @@ class AddHPEventBody {
     @IsString() @IsNotEmpty() courseId!: string;
     @IsString() @IsNotEmpty() studentId!: string;
     @IsEnum(['BONUS', 'PENALTY', 'MANUAL', 'INITIALIZED']) type!: HPEventType;
-    @IsNumber() percentageChange!: number;
+    @IsNumber() pointsChange!: number;
     @IsString() @IsNotEmpty() reason!: string;
 }
 
@@ -89,7 +89,7 @@ export class HealthPointsController {
         @Body() body: AddHPEventBody,
         @Ability(getCourseAbility) { ability, user }
     ) {
-        const { courseId, studentId, type, percentageChange, reason } = body;
+        const { courseId, studentId, type, pointsChange, reason } = body;
 
         if (!ability.can(CourseActions.Modify, subject('Course', { courseId }))) {
             throw new ForbiddenError('You do not have permission to manage Health Points for this course');
@@ -99,7 +99,7 @@ export class HealthPointsController {
             studentId,
             courseId,
             type,
-            percentageChange,
+            pointsChange,
             reason,
             user._id.toString()
         );

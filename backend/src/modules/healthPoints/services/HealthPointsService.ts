@@ -16,9 +16,8 @@ export class HealthPointsService {
      * Rules: 
      * newHP = currentHP + (currentHP * percentage / 100)
      */
-    private calculateNewHP(currentHP: number, percentageChange: number): number {
-        const delta = (currentHP * percentageChange) / 100;
-        return Math.max(0, currentHP + delta); // HP cannot be negative
+    private calculateNewHP(currentHP: number, pointsChange: number): number {
+        return Math.max(0, currentHP + pointsChange); // HP cannot be negative
     }
 
     /**
@@ -68,7 +67,7 @@ export class HealthPointsService {
         userId: string,
         courseId: string,
         type: HPEventType,
-        percentageChange: number,
+        pointsChange: number,
         reason: string,
         createdBy: string,
         session?: ClientSession
@@ -77,14 +76,14 @@ export class HealthPointsService {
 
         // If HP record still not found after initialization (race condition/DB timing), use default
         const previousHP = currentRecord?.currentHP ?? 1000;
-        let signedPercentage = percentageChange;
+        let signedChange = pointsChange;
         if (type === 'BONUS') {
-            signedPercentage = Math.abs(percentageChange);
+            signedChange = Math.abs(pointsChange);
         } else if (type === 'PENALTY') {
-            signedPercentage = -Math.abs(percentageChange);
+            signedChange = -Math.abs(pointsChange);
         }
-        // For MANUAL, use the percentageChange as provided (can be positive or negative)
-        const newHP = this.calculateNewHP(previousHP, signedPercentage);
+        // For MANUAL, use the pointsChange as provided (can be positive or negative)
+        const newHP = this.calculateNewHP(previousHP, signedChange);
         const newStatus = this.determineStatus(newHP, previousHP);
 
         // Record Event
@@ -92,7 +91,7 @@ export class HealthPointsService {
             userId,
             courseId,
             type,
-            signedPercentage,
+            signedChange,
             reason,
             createdBy,
             session

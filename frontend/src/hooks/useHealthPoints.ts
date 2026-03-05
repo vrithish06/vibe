@@ -84,7 +84,7 @@ export function useAddHPEvent() {
         courseId: string;
         studentId: string;
         type: 'BONUS' | 'PENALTY' | 'MANUAL';
-        percentageChange: number;
+        pointsChange: number;
         reason: string;
     }) => {
         try {

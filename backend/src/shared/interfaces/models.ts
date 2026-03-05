@@ -420,7 +420,7 @@ export interface IHPEvent {
   userId: string | ObjectId;
   courseId: string | ObjectId;
   type: HPEventType;
-  percentageChange: number;
+  pointsChange: number;
   reason: string;
   createdAt: Date;
   createdBy: string | ObjectId;

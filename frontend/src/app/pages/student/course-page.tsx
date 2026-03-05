@@ -2191,7 +2191,7 @@ export default function CoursePage() {
 
                                 // Show success with HP awarded
                                 toast.success(
-                                  `🎉 Activity completed! You earned ${result.hpAwarded || 0} HP!`,
+                                  `🎉 Activity completed! You earned ${result.hpAwarded || 0} BP!`,
                                   { position: 'top-right', duration: 4000 }
                                 );
                               } catch (error: any) {
@@ -2286,7 +2286,7 @@ export default function CoursePage() {
                             <p className="text-sm font-semibold text-purple-700 dark:text-purple-400">Reward</p>
                             <p className="text-sm text-purple-600 dark:text-purple-300">
                               {selectedActivity.rewardValue}
-                              {selectedActivity.rewardType === 'PERCENTAGE' ? '%' : ' HP'} on successful completion
+                              {selectedActivity.rewardType === 'PERCENTAGE' ? '%' : ' BP'} on successful completion
                             </p>
                           </div>
                         </div>

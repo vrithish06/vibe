@@ -152,8 +152,8 @@ export default function StudentHealthPoints({ courseId }: { courseId: string }) 
                                                 <TableCell className="w-[120px]">
                                                     <Badge variant="outline" className="text-[10px] tracking-wider font-semibold uppercase">{event.type}</Badge>
                                                 </TableCell>
-                                                <TableCell className={`w-[80px] font-bold ${event.percentageChange >= 0 ? 'text-green-500' : 'text-rose-500'}`}>
-                                                    {event.percentageChange > 0 ? '+' : ''}{event.percentageChange}
+                                                <TableCell className={`w-[80px] font-bold ${event.pointsChange >= 0 ? 'text-green-500' : 'text-rose-500'}`}>
+                                                    {event.pointsChange > 0 ? '+' : ''}{event.pointsChange}
                                                 </TableCell>
                                                 <TableCell className="text-sm text-foreground/90">
                                                     {event.reason}

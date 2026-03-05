@@ -23,22 +23,22 @@ export function HealthPointsDetail() {
     const { mutate, isPending } = useAddHPEvent();
 
     const [formType, setFormType] = useState<'BONUS' | 'PENALTY' | 'MANUAL'>('BONUS');
-    const [percentage, setPercentage] = useState('');
+    const [pointsChange, setPointsChange] = useState('');
     const [reason, setReason] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!percentage || !reason) return;
+        if (!pointsChange || !reason) return;
 
         await mutate({
             courseId,
             studentId,
             type: formType,
-            percentageChange: Number(percentage),
+            pointsChange: Number(pointsChange),
             reason
         });
 
-        setPercentage('');
+        setPointsChange('');
         setReason('');
         refetch(); // Refresh data
     };
@@ -118,15 +118,14 @@ export function HealthPointsDetail() {
                                     </Select>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>Percentage (%)</Label>
+                                    <Label>Points</Label>
                                     <Input
                                         type="number"
                                         placeholder="e.g. 5"
-                                        value={percentage}
-                                        onChange={(e) => setPercentage(e.target.value)}
+                                        value={pointsChange}
+                                        onChange={(e) => setPointsChange(e.target.value)}
                                         required
                                         min={formType === 'MANUAL' ? undefined : "0"}
-                                        max={formType === 'MANUAL' ? undefined : "100"}
                                     />
                                 </div>
                             </div>
@@ -175,8 +174,8 @@ export function HealthPointsDetail() {
                                     <TableCell>
                                         <Badge variant="outline">{event.type}</Badge>
                                     </TableCell>
-                                    <TableCell className={event.percentageChange >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
-                                        {event.percentageChange > 0 ? '+' : ''}{event.percentageChange}
+                                    <TableCell className={event.pointsChange >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                                        {event.pointsChange > 0 ? '+' : ''}{event.pointsChange}
                                     </TableCell>
                                     <TableCell>{event.reason}</TableCell>
                                     <TableCell>{event.createdByName || event.createdBy || 'System'}</TableCell>

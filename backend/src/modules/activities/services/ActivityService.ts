@@ -213,29 +213,24 @@ export class ActivityService {
 
         if (activity.rewardValue != null && activity.rewardValue > 0) {
             try {
-                let percentageChange = 0;
+                let pointsChange = 0;
 
                 if (activity.rewardType === 'PERCENTAGE') {
-                    // Direct percentage reward
-                    percentageChange = activity.rewardValue;
-                } else {
-                    // ABSOLUTE reward: convert HP units to percentage of current HP
+                    // Direct percentage reward - convert to absolute points based on current HP
                     const currentRecord = await this.hpService.getHealthPoints(user.userId, courseId, session);
-                    const currentHP = currentRecord?.currentHP ?? 1000; // default 1000 if not initialized
-                    if (currentHP > 0) {
-                        percentageChange = (activity.rewardValue / currentHP) * 100;
-                    } else {
-                        // HP is 0 — treat reward value directly as a percentage point
-                        percentageChange = activity.rewardValue;
-                    }
+                    const currentHP = currentRecord?.currentHP ?? 1000;
+                    pointsChange = (currentHP * activity.rewardValue) / 100;
+                } else {
+                    // ABSOLUTE reward
+                    pointsChange = activity.rewardValue;
                 }
 
-                if (percentageChange > 0) {
+                if (pointsChange > 0) {
                     const result = await this.hpService.addEvent(
                         user.userId,
                         courseId,
                         'BONUS',
-                        percentageChange,
+                        pointsChange,
                         `Activity completion: ${activity.title}`,
                         user.userId,
                         session
