@@ -14,25 +14,26 @@ interface AddActivityProps {
     versionId: string;
     onSuccess: () => void;
     onCancel: () => void;
+    initialData?: any;
 }
 
-export function AddActivity({ courseId, versionId, onSuccess, onCancel }: AddActivityProps) {
+export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialData }: AddActivityProps) {
     const { token } = useAuthStore();
     const [isLoading, setIsLoading] = useState(false);
     const [formData, setFormData] = useState({
-        title: '',
-        description: '',
-        activityType: 'ASSIGNMENT',
-        deadline: '',
-        rewardType: 'ABSOLUTE',
-        rewardValue: 10,
-        mandatory: false,
-        penaltyType: 'PERCENTAGE',
-        penaltyValue: 0,
-        submissionMode: 'IN_PLATFORM',
-        status: 'PUBLISHED',
-        gracePeriodDuration: 0,
-        graceRewardPercentage: 100
+        title: initialData?.title || '',
+        description: initialData?.description || '',
+        activityType: initialData?.activityType || 'ASSIGNMENT',
+        deadline: initialData?.deadline ? new Date(initialData.deadline).toISOString().slice(0, 16) : '',
+        rewardType: initialData?.rewardType || 'ABSOLUTE',
+        rewardValue: initialData?.rewardValue ?? 10,
+        mandatory: initialData?.mandatory ?? initialData?.isMandatory ?? false,
+        penaltyType: initialData?.penaltyType || 'PERCENTAGE',
+        penaltyValue: initialData?.penaltyValue ?? 0,
+        submissionMode: initialData?.submissionMode || 'IN_PLATFORM',
+        status: initialData?.status || 'PUBLISHED',
+        gracePeriodDuration: initialData?.gracePeriodDuration ?? 0,
+        graceRewardPercentage: initialData?.graceRewardPercentage ?? 100
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -61,29 +62,41 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel }: AddAct
 
         setIsLoading(true);
         try {
-            const response = await fetch(`${import.meta.env.VITE_BASE_URL}/activities`, {
-                method: 'POST',
+            const endpoint = initialData ? `${import.meta.env.VITE_BASE_URL}/activities/${initialData._id || initialData.id}` : `${import.meta.env.VITE_BASE_URL}/activities`;
+            const method = initialData ? 'PUT' : 'POST';
+
+            // Clean up the body to avoid sending unnecessary fields to update
+            const requestBody: any = {
+                ...formData,
+                isMandatory: formData.mandatory,
+                mandatory: formData.mandatory,
+                deadline: new Date(formData.deadline).toISOString(),
+                // Send null for penalty fields when mandatory is false to clear them in backend
+                penaltyType: formData.mandatory ? formData.penaltyType : null,
+                penaltyValue: formData.mandatory ? formData.penaltyValue : null,
+            };
+
+            // Only send parent IDs for new activities (POST)
+            if (!initialData) {
+                requestBody.courseId = courseId;
+                requestBody.courseVersionId = versionId;
+            }
+
+            const response = await fetch(endpoint, {
+                method,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({
-                    courseId,
-                    courseVersionId: versionId,
-                    ...formData,
-                    deadline: new Date(formData.deadline).toISOString(),
-                    // Only send penalty fields when mandatory is true
-                    penaltyType: formData.mandatory ? formData.penaltyType : undefined,
-                    penaltyValue: formData.mandatory ? formData.penaltyValue : undefined,
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.message || "Failed to create activity");
+                throw new Error(errorData.message || `Failed to ${initialData ? 'update' : 'create'} activity`);
             }
 
-            toast.success("Activity created successfully");
+            toast.success(`Activity ${initialData ? 'updated' : 'created'} successfully`);
             onSuccess();
         } catch (error: any) {
             console.error(error);
@@ -97,8 +110,8 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel }: AddAct
         <div className="bg-white dark:bg-background rounded-2xl shadow-lg border border-slate-200 dark:border-gray-700 overflow-hidden">
             <div className="p-4 md:p-6 lg:p-8">
                 <div className="mb-6 pb-4 border-b border-slate-200 dark:border-gray-700">
-                    <h2 className="text-xl font-bold text-slate-900 dark:text-gray-100">Create New Activity</h2>
-                    <p className="text-sm text-muted-foreground mt-1">Configure a new activity or assignment for this course version.</p>
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-gray-100">{initialData ? 'Edit' : 'Create New'} Activity</h2>
+                    <p className="text-sm text-muted-foreground mt-1">Configure {initialData ? 'this' : 'a new'} activity or assignment for this course version.</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
@@ -214,7 +227,7 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel }: AddAct
                         </Button>
                         <Button type="submit" disabled={isLoading} className="bg-primary text-primary-foreground hover:bg-primary/90">
                             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            Create Activity
+                            {initialData ? 'Save Changes' : 'Create Activity'}
                         </Button>
                     </div>
                 </form>

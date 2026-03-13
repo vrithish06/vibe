@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo, ChangeEvent, use } from "react";
-import * as Papa from 'papaparse';
-import { useAddQuestionBankToQuiz, useAddQuestionToBank, useCreateQuestion, useCreateQuestionBank, useOverallVideoAnalytics, userParseCSVtoItems, useUpdateItemOptional, useVideoUserAnalytics } from '@/hooks/hooks';
-import { BarChart3, Download, LogOut, Upload, UserRoundCheck, Video, Clock, PlayCircle, Users, Search, LockOpen, Lock } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo, ChangeEvent } from "react";
+import Papa from 'papaparse';
+import { useOverallVideoAnalytics, userParseCSVtoItems, useUpdateItemOptional, useVideoUserAnalytics } from '@/hooks/hooks';
+import { BarChart3, LogOut, Video, Clock, PlayCircle, Users, Search, LockOpen, Lock, UserRoundCheck } from 'lucide-react';
 import { useHideItem } from '@/hooks/hooks';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const MAX_DESCRIPTION_LENGTH = 1000;
 
@@ -26,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input"; // Force HMR reload
 
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   BookOpen, ChevronRight, FileText, VideoIcon, ListChecks, Plus, Sparkles,
@@ -45,7 +47,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Home, GraduationCap } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-import { useCourseVersionById, useCreateModule, useUpdateModule, useDeleteModule, useCreateSection, useUpdateSection, useDeleteSection, useCreateItem, useUpdateItem, useDeleteItem, useItemsBySectionId, useItemById, useQuizDetails, useQuizAnalytics, useQuizPerformance, useQuizResults, useMoveModule, useMoveSection, useMoveItem, useUpdateCourseItem, useCourseById, useHideModule, useHideSection, useActivitiesForTeacher, useDeleteActivity, useUpdateActivity } from "@/hooks/hooks";
+import { useCourseVersionById, useCreateModule, useUpdateModule, useDeleteModule, useCreateSection, useUpdateSection, useDeleteSection, useCreateItem, useUpdateItem, useDeleteItem, useItemsBySectionId, useItemById, useQuizDetails, useQuizAnalytics, useQuizPerformance, useMoveModule, useMoveSection, useMoveItem, useUpdateCourseItem, useCourseById, useHideModule, useHideSection, useActivitiesForTeacher, useDeleteActivity, useUpdateActivity } from "@/hooks/hooks";
 import { useCourseStore } from "@/store/course-store";
 import VideoModal from "./components/Video-modal";
 import EnhancedQuizEditor from "./components/enhanced-quiz-editor";
@@ -143,7 +145,7 @@ type CSVRow = {
 function TeacherCourseContent() {
   const [mode, setMode] = useState<Mode>("default");
   const matches = useMatches();
-  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
+  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItemment[]>([]);
   const [showInvites, setShowInvites] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
@@ -157,7 +159,7 @@ function TeacherCourseContent() {
     logout();
     navigate({ to: "/auth" });
   };
-  const createQuestion = useCreateQuestion();
+  // const createQuestion = useCreateQuestion();
   const user = useAuthStore().user;
   const { currentCourse, setCurrentCourse } = useCourseStore();
   // Use correct keys for course/version IDs
@@ -169,7 +171,7 @@ function TeacherCourseContent() {
 
 
   useEffect(() => {
-    const items: BreadcrumbItem[] = [];
+    const items: BreadcrumbItemment[] = [];
     items.push({
       label: "Dashboard",
       path: "/teacher",
@@ -259,6 +261,7 @@ function TeacherCourseContent() {
   const [originalModuleData, setOriginalModuleData] = useState<ModuleData | null>(null);
   const [originalSectionData, setOriginalSectionData] = useState<{ name: string; description: string } | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleteActivityModalOpen, setIsDeleteActivityModalOpen] = useState(false);
 
 
   // const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -291,7 +294,7 @@ function TeacherCourseContent() {
   const [autoSelectCurrentIndex, setAutoSelectCurrentIndex] = useState(0);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [selectedEntity, setSelectedEntity] = useState<{
-    type: "module" | "section" | "item" | "add_activity" | "activity";
+    type: "module" | "section" | "item" | "add_activity" | "activity" | "edit_activity";
     data: any;
     parentIds?: { moduleId: string; sectionId?: string; itemsGroupId?: string } | null;
   } | null>(null);
@@ -410,8 +413,9 @@ function TeacherCourseContent() {
   // Sync controlled state with selectedItemData for PROJECT edit
   useEffect(() => {
     if (selectedEntity?.type === 'item' && selectedEntity.data.type === 'PROJECT') {
-      setProjectEditName(selectedItemData?.item?.name || '');
-      setProjectEditDescription(selectedItemData?.item?.description || '');
+      const itemData = selectedItemData as any;
+      setProjectEditName(itemData?.item?.name || '');
+      setProjectEditDescription(itemData?.item?.description || '');
     }
   }, [selectedEntity, selectedItemData]);
 
@@ -1137,7 +1141,7 @@ function TeacherCourseContent() {
       });
     }
     if (type === "project") {
-      createItem.mutate({
+      createItemAsync({
         params: { path: { versionId, moduleId, sectionId } },
         body: {
           type: typeMap[type], name: `New ${typeMap[type]}`,
@@ -1151,7 +1155,7 @@ function TeacherCourseContent() {
           }
           toast.success("Project created successfully");
         })
-        .catch((error) => {
+        .catch((error: any) => {
           console.error("Error creating project:", error);
           toast.error(`Failed to create project: ${error.message || 'Unknown error'}`);
         });
@@ -1161,8 +1165,8 @@ function TeacherCourseContent() {
         params: {
           path: {
             versionId: versionId!,
-            moduleId: module.moduleId,
-            sectionId: section.sectionId,
+            moduleId: moduleId!,
+            sectionId: sectionId!,
           },
         },
         body: {
@@ -1205,9 +1209,9 @@ function TeacherCourseContent() {
           },
         }
       })
-        .then((created) => {
+        .then((created: any) => {
           const newItem = created?.createdItem || created?.item || created?.data || created;
-          const itemsGroupId = created?.itemsGroup?._id || section.itemsGroupId;
+          const itemsGroupId = created?.itemsGroup?._id;
 
           if (newItem && newItem._id) {
             // Auto-select the newly created feedback form
@@ -1216,8 +1220,8 @@ function TeacherCourseContent() {
               type: "item",
               data: newItem,
               parentIds: {
-                moduleId: module.moduleId,
-                sectionId: section.sectionId,
+                moduleId: moduleId!,
+                sectionId: sectionId!,
                 itemsGroupId,
               },
             });
@@ -2205,8 +2209,8 @@ function TeacherCourseContent() {
                               </div>
                               <span className="truncate text-sm">{activity.title}</span>
                             </div>
-                            <Badge variant={activity.isMandatory ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-4">
-                              {activity.isMandatory ? 'Req' : 'Opt'}
+                            <Badge variant={(activity.mandatory ?? activity.isMandatory) ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-4">
+                              {(activity.mandatory ?? activity.isMandatory) ? 'Req' : 'Opt'}
                             </Badge>
                           </SidebarMenuButton>
                         </SidebarMenuItem>
@@ -2447,18 +2451,23 @@ function TeacherCourseContent() {
               <AiWorkflow />
             ) : mode === "custom" ? (
               <AISectionPage />
-            ) : selectedEntity?.type === "add_activity" ? (
+            ) : selectedEntity?.type === "add_activity" || selectedEntity?.type === "edit_activity" ? (
               <AddActivity
                 courseId={courseId!}
                 versionId={versionId!}
+                initialData={selectedEntity.type === 'edit_activity' ? selectedEntity.data : undefined}
                 onSuccess={() => {
                   setSelectedItem({ id: '', name: '' });
                   setSelectedEntity(null);
                   refetchActivities();
                 }}
                 onCancel={() => {
-                  setSelectedItem({ id: '', name: '' });
-                  setSelectedEntity(null);
+                  if (selectedEntity.type === 'edit_activity') {
+                    setSelectedEntity({ type: 'activity', data: selectedEntity.data });
+                  } else {
+                    setSelectedItem({ id: '', name: '' });
+                    setSelectedEntity(null);
+                  }
                 }}
               />
             ) : selectedEntity?.type === "activity" && selectedEntity.data ? (
@@ -2473,7 +2482,7 @@ function TeacherCourseContent() {
                       <div className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
                         <Badge variant="outline">{selectedEntity.data.activityType?.replace(/_/g, ' ') || 'Activity'}</Badge>
                         <span>•</span>
-                        <span>{selectedEntity.data.isMandatory ? 'Required' : 'Optional'}</span>
+                        <span>{(selectedEntity.data.mandatory ?? selectedEntity.data.isMandatory) ? 'Required' : 'Optional'}</span>
                         <span>•</span>
                         <Badge
                           className={selectedEntity.data.status === 'PUBLISHED'
@@ -2506,24 +2515,39 @@ function TeacherCourseContent() {
                           {isUpdatingActivity ? '...' : 'Publish'}
                         </Button>
                       )}
+                      <Button variant="outline" size="sm"
+                        onClick={() => setSelectedEntity({ type: "edit_activity", data: selectedEntity.data })}
+                      >
+                        Edit
+                      </Button>
                       <Button variant="destructive" size="sm"
                         disabled={isDeletingActivity}
-                        onClick={async () => {
-                          if (confirm(`Are you sure you want to delete activity "${selectedEntity.data.title}"?`)) {
-                            try {
-                              await deleteActivityAsync(getIdStr(selectedEntity.data._id));
-                              toast.success("Activity deleted successfully");
-                              refetchActivities();
-                              setSelectedEntity(null);
-                              setSelectedItem({ id: '', name: '' });
-                            } catch (error: any) {
-                              toast.error(error.message || "Failed to delete activity");
-                            }
-                          }
-                        }}
+                        onClick={() => setIsDeleteActivityModalOpen(true)}
                       >
                         {isDeletingActivity ? '...' : 'Delete'}
                       </Button>
+                      <ConfirmationModal
+                        isOpen={isDeleteActivityModalOpen}
+                        onClose={() => setIsDeleteActivityModalOpen(false)}
+                        onConfirm={async () => {
+                          try {
+                            await deleteActivityAsync(getIdStr(selectedEntity.data._id));
+                            toast.success("Activity deleted successfully");
+                            refetchActivities();
+                            setSelectedEntity(null);
+                            setSelectedItem({ id: '', name: '' });
+                            setIsDeleteActivityModalOpen(false);
+                          } catch (error: any) {
+                            toast.error(error.message || "Failed to delete activity");
+                          }
+                        }}
+                        title="Delete Activity"
+                        description={`This will delete this activity. Are you sure you want to delete it?`}
+                        confirmText="Delete"
+                        cancelText="Cancel"
+                        isDestructive={true}
+                        isLoading={isDeletingActivity}
+                      />
                     </div>
                   </div>
 
@@ -2552,7 +2576,7 @@ function TeacherCourseContent() {
                         </div>
                       )}
 
-                      {selectedEntity.data.isMandatory && selectedEntity.data.penaltyType && selectedEntity.data.penaltyValue !== undefined && (
+                      {(selectedEntity.data.mandatory ?? selectedEntity.data.isMandatory) && selectedEntity.data.penaltyType && selectedEntity.data.penaltyValue !== undefined && (
                         <div className="p-4 rounded-lg border bg-card/50 border-destructive/20">
                           <h4 className="text-xs font-semibold text-destructive/80 uppercase tracking-wider mb-1">Penalty</h4>
                           <p className="text-sm font-medium text-destructive">
@@ -2736,9 +2760,7 @@ function TeacherCourseContent() {
                           <Label className="text-sm font-bold text-foreground">Title *</Label>
                           <Input
                             value={
-                              selectedEntity.type === "item"
-                                ? selectedItemData?.item?.name ?? ""
-                                : selectedEntity.data?.name ?? ""
+                              selectedEntity.data?.name ?? ""
                             }
                             disabled={
                               (selectedEntity.type === "module" && !isEditingModule) ||
@@ -2797,9 +2819,7 @@ function TeacherCourseContent() {
                             <div className="relative">
                               <textarea
                                 value={
-                                  selectedEntity.type === "item"
-                                    ? selectedItemData?.item?.description ?? ""
-                                    : selectedEntity.data?.description ?? ""
+                                  selectedEntity.data?.description ?? ""
                                 }
                                 disabled={
                                   (selectedEntity.type === "module" && !isEditingModule) ||

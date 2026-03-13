@@ -70,16 +70,21 @@ export class ActivityRepository {
 
     async update(id: string | ObjectId, updateData: Partial<IActivity>, session?: ClientSession): Promise<IActivity | null> {
         await this.init();
+        
+        const rawUpdate: any = { ...updateData };
+        
+        // Ensure ObjectId fields are converted if present
+        if (rawUpdate.courseId) rawUpdate.courseId = new ObjectId(rawUpdate.courseId);
+        if (rawUpdate.courseVersionId) rawUpdate.courseVersionId = new ObjectId(rawUpdate.courseVersionId);
+        if (rawUpdate.cohortId) rawUpdate.cohortId = new ObjectId(rawUpdate.cohortId);
+        if (rawUpdate.createdBy) rawUpdate.createdBy = new ObjectId(rawUpdate.createdBy);
+
         const updateDoc = {
             $set: {
-                ...updateData,
+                ...rawUpdate,
                 updatedAt: new Date()
             }
         };
-
-        if (updateData.cohortId) {
-            updateDoc.$set.cohortId = new ObjectId(updateData.cohortId);
-        }
 
         const result = await this.activitiesCollection.findOneAndUpdate(
             { _id: new ObjectId(id), isDeleted: { $ne: true } },
@@ -98,7 +103,10 @@ export class ActivityRepository {
         await this.init();
 
         const query: any = {
-            courseVersionId: new ObjectId(courseVersionId),
+            $or: [
+                { courseVersionId: new ObjectId(courseVersionId) },
+                { courseVersionId: courseVersionId.toString() }
+            ],
             isDeleted: { $ne: true }
         };
 
