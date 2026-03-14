@@ -19,6 +19,10 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
 
   // A local map of student id to HP points to be awarded
   const [grades, setGrades] = useState<Record<string, number | "">>({});
+  // Track previous HP values to show delta
+  const [previousGrades, setPreviousGrades] = useState<Record<string, number>>({});
+  // Apply to all value
+  const [applyToAllValue, setApplyToAllValue] = useState<string>("");
 
   useEffect(() => {
     fetchSubmissions();
@@ -34,10 +38,13 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
       setSubmissions(data);
 
       const initialGrades: Record<string, number | ""> = {};
+      const previousGradeMap: Record<string, number> = {};
       data.forEach((s: any) => {
         initialGrades[s.userId] = s.hpAwarded ?? "";
+        previousGradeMap[s.userId] = s.hpAwarded ?? 0;
       });
       setGrades(initialGrades);
+      setPreviousGrades(previousGradeMap);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -50,6 +57,22 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
       ...prev,
       [userId]: val === "" ? "" : Number(val)
     }));
+  };
+
+  const handleApplyToAll = () => {
+    const value = applyToAllValue === "" ? "" : Number(applyToAllValue);
+    if (typeof value === "number" && value < 0) {
+      toast.error("HP value cannot be negative");
+      return;
+    }
+    setGrades(prev => {
+      const updated: Record<string, number | ""> = { ...prev };
+      submissions.forEach((sub) => {
+        updated[sub.userId] = value;
+      });
+      return updated;
+    });
+    toast.success("Applied to all students");
   };
 
   const handeSaveAll = async () => {
@@ -90,6 +113,29 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
           </Button>
         </div>
 
+        <div className="p-4 md:p-6 border-b bg-muted/30 flex gap-3 items-end">
+          <div className="flex-1">
+            <label className="text-sm font-medium">Assign Same HP to All Students</label>
+            <div className="flex gap-2 mt-2">
+              <Input 
+                type="number" 
+                min="0"
+                value={applyToAllValue}
+                onChange={(e) => setApplyToAllValue(e.target.value)}
+                placeholder="Enter HP value"
+                className="h-9"
+              />
+              <Button 
+                onClick={handleApplyToAll}
+                variant="outline"
+                disabled={isLoading || isSaving}
+              >
+                Apply to All
+              </Button>
+            </div>
+          </div>
+        </div>
+
         <div className="flex-1 overflow-auto p-4 md:p-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-10">
@@ -108,7 +154,8 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
                     <th className="px-4 py-3 font-semibold">Email</th>
                     <th className="px-4 py-3 font-semibold">Submitted At</th>
                     <th className="px-4 py-3 font-semibold text-center">Submission</th>
-                    <th className="px-4 py-3 font-semibold w-32">HP Assigned</th>
+                    <th className="px-4 py-3 font-semibold w-32">HP to Award</th>
+                    <th className="px-4 py-3 font-semibold w-32">Change</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -166,6 +213,21 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
                           className="h-8 text-center"
                         />
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        {typeof grades[sub.userId] === 'number' ? (
+                          <span className={`text-sm font-semibold ${
+                            (grades[sub.userId] as number) - previousGrades[sub.userId] > 0 
+                              ? 'text-green-600 dark:text-green-400' 
+                              : (grades[sub.userId] as number) - previousGrades[sub.userId] < 0 
+                              ? 'text-red-600 dark:text-red-400' 
+                              : 'text-gray-500'
+                          }`}>
+                            {(grades[sub.userId] as number) - previousGrades[sub.userId] > 0 ? '+' : ''}{(grades[sub.userId] as number) - previousGrades[sub.userId]}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -177,7 +239,7 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
         <div className="p-4 md:p-6 border-t flex justify-end gap-3 bg-muted/10">
           <Button variant="outline" onClick={onClose} disabled={isSaving}>Cancel</Button>
           <Button onClick={handeSaveAll} disabled={isSaving || isLoading || submissions.length === 0}>
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Save All Health Points"}
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Release HP"}
           </Button>
         </div>
       </div>
