@@ -21,6 +21,8 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
   const [grades, setGrades] = useState<Record<string, number | "">>({});
   // Track previous HP values to show delta
   const [previousGrades, setPreviousGrades] = useState<Record<string, number>>({});
+  // Apply to all value
+  const [applyToAllValue, setApplyToAllValue] = useState<string>("");
 
   useEffect(() => {
     fetchSubmissions();
@@ -55,6 +57,22 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
       ...prev,
       [userId]: val === "" ? "" : Number(val)
     }));
+  };
+
+  const handleApplyToAll = () => {
+    const value = applyToAllValue === "" ? "" : Number(applyToAllValue);
+    if (typeof value === "number" && value < 0) {
+      toast.error("HP value cannot be negative");
+      return;
+    }
+    setGrades(prev => {
+      const updated: Record<string, number | ""> = { ...prev };
+      submissions.forEach((sub) => {
+        updated[sub.userId] = value;
+      });
+      return updated;
+    });
+    toast.success("Applied to all students");
   };
 
   const handeSaveAll = async () => {
@@ -93,6 +111,29 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
           <Button variant="ghost" size="icon" onClick={onClose}>
             ✕
           </Button>
+        </div>
+
+        <div className="p-4 md:p-6 border-b bg-muted/30 flex gap-3 items-end">
+          <div className="flex-1">
+            <label className="text-sm font-medium">Assign Same HP to All Students</label>
+            <div className="flex gap-2 mt-2">
+              <Input 
+                type="number" 
+                min="0"
+                value={applyToAllValue}
+                onChange={(e) => setApplyToAllValue(e.target.value)}
+                placeholder="Enter HP value"
+                className="h-9"
+              />
+              <Button 
+                onClick={handleApplyToAll}
+                variant="outline"
+                disabled={isLoading || isSaving}
+              >
+                Apply to All
+              </Button>
+            </div>
+          </div>
         </div>
 
         <div className="flex-1 overflow-auto p-4 md:p-6">
@@ -198,7 +239,7 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
         <div className="p-4 md:p-6 border-t flex justify-end gap-3 bg-muted/10">
           <Button variant="outline" onClick={onClose} disabled={isSaving}>Cancel</Button>
           <Button onClick={handeSaveAll} disabled={isSaving || isLoading || submissions.length === 0}>
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Save All Health Points"}
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Release HP"}
           </Button>
         </div>
       </div>

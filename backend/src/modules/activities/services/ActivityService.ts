@@ -307,20 +307,20 @@ export class ActivityService {
             );
             const previousHpAwarded = submission?.hpAwarded ?? 0;
             
-            // Calculate the delta (difference between new and previous)
-            const hpDelta = grade.hpAwarded - previousHpAwarded;
+            // Calculate the change (difference between new and previous)
+            const hpChange = grade.hpAwarded - previousHpAwarded;
 
             // Update submission record
             await this.activityRepo.updateSubmissionGrade(activityId, grade.userId, grade.hpAwarded, session);
 
-            // Give HP to user only for the delta (not the full amount)
-            if (hpDelta !== 0) {
+            // Give HP to user only for the change (not the full amount)
+            if (hpChange !== 0) {
                 try {
                     await this.hpService.addEvent(
                         grade.userId,
                         courseId,
                         'BONUS', // or custom event type
-                        hpDelta,
+                        hpChange,
                         `Activity graded: ${activity.title}`,
                         user.userId,
                         session
