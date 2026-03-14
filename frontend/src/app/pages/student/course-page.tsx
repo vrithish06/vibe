@@ -1726,7 +1726,7 @@ export default function CoursePage() {
                                 const isSelected = selectedActivityId === actId;
                                 const isDone = acknowledgedActivities[actId];
                                 const deadlineDate = activity.deadline ? new Date(activity.deadline) : null;
-                                const isOverdue = deadlineDate && deadlineDate < new Date();
+                                const isOverdue = deadlineDate && deadlineDate < new Date() && !isDone;
                                 return (
                                   <button
                                     key={actId}
@@ -2276,7 +2276,8 @@ export default function CoursePage() {
                       {/* Deadline */}
                       {selectedActivity.deadline && (() => {
                         const dl = new Date(selectedActivity.deadline);
-                        const overdue = dl < new Date();
+                        const isCompleted = acknowledgedActivities[getIdStr(selectedActivity._id)];
+                        const overdue = dl < new Date() && !isCompleted;
                         return (
                           <div className={`flex items-center gap-3 p-4 rounded-lg border ${overdue ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' : 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800'}`}>
                             <AlertCircle className={`h-5 w-5 flex-shrink-0 ${overdue ? 'text-red-500' : 'text-blue-500'}`} />
@@ -2332,6 +2333,11 @@ export default function CoursePage() {
                           <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-medium">
                             <CheckCircle className="h-5 w-5" />
                             <span>You have declared this activity as completed.</span>
+                          </div>
+                        ) : selectedActivity.deadline && new Date(selectedActivity.deadline) < new Date() ? (
+                          <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-medium">
+                            <AlertCircle className="h-5 w-5" />
+                            <span>The deadline has passed. Submissions are no longer accepted.</span>
                           </div>
                         ) : (
                           <div className="flex gap-3">

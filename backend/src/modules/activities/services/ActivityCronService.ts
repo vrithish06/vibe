@@ -9,8 +9,8 @@ export class ActivityCronService {
   ) {}
 
   public scheduleActivityCron() {
-    // Run every hour to check for completed activities past their deadline
-    cron.schedule('0 * * * *', async () => {
+    // Run every minute for testing (change back to '0 * * * *' for production)
+    cron.schedule('* * * * *', async () => {
       console.log('Running automatic activity grading cron job...');
       try {
         await this.activityService.processAutomaticActivityHP();

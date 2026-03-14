@@ -5,12 +5,14 @@ import { BadRequestError, NotFoundError, ForbiddenError } from 'routing-controll
 import { ObjectId, ClientSession } from 'mongodb';
 import { AuthenticatedUser } from '#shared/interfaces/models.js';
 import { HealthPointsService } from '../../../modules/healthPoints/services/HealthPointsService.js';
+import { EnrollmentRepository } from '#shared/database/providers/mongo/repositories/EnrollmentRepository.js';
 
 @injectable()
 export class ActivityService {
     constructor(
         @inject(ActivityRepository) private activityRepo: ActivityRepository,
-        @inject(HealthPointsService) private hpService: HealthPointsService
+        @inject(HealthPointsService) private hpService: HealthPointsService,
+        @inject(EnrollmentRepository) private enrollmentRepo: EnrollmentRepository
     ) { }
 
     private validateActivityData(data: Partial<IActivity>) {
@@ -215,7 +217,7 @@ export class ActivityService {
         // But for backwards compatibility, if hpAssignmentMode is missing, we still award here.
         // Wait, "if teacher selects it as manual... in automatic mode if dead line is 14 march 12 pm then after 12 pm all students automatically get..."
         // Lets just disable immediate grading if it's MANUAL.
-        if (activity.hpAssignmentMode !== 'MANUAL' && activity.rewardValue != null && activity.rewardValue > 0) {
+        if (activity.hpAssignmentMode !== 'MANUAL' && activity.hpAssignmentMode !== 'AUTOMATIC' && activity.rewardValue != null && activity.rewardValue > 0) {
             try {
                 let pointsChange = 0;
 
@@ -327,45 +329,130 @@ export class ActivityService {
 
     async processAutomaticActivityHP() {
         const activities = await this.activityRepo.findForAutomaticGrading();
-        for (const activity of activities) {
-            if (!activity.submissions || activity.submissions.length === 0) {
-                await this.activityRepo.markAsAutomaticallyGraded(activity._id!);
-                continue;
-            }
+        const now = new Date();
 
-            const courseId = activity.courseId?.toString() || (activity.courseId as any).toString();
+        for (const activity of activities) {
+            const deadlineDate = new Date(activity.deadline);
+            const gracePeriodHours = activity.gracePeriodDuration || 0;
+            const absoluteDeadline = new Date(deadlineDate.getTime() + gracePeriodHours * 60 * 60 * 1000);
             
-            for (const sub of activity.submissions) {
-                if (sub.hpAwarded !== undefined) continue;
-                
-                let pointsChange = 0;
-                if (activity.rewardType === 'PERCENTAGE') {
-                    // It's tricky without a session, but we will just query getHealthPoints
-                    const currentRecord = await this.hpService.getHealthPoints(sub.userId.toString(), courseId);
-                    const currentHP = currentRecord?.currentHP ?? 1000;
-                    pointsChange = (currentHP * activity.rewardValue) / 100;
-                } else {
-                    pointsChange = activity.rewardValue;
-                }
-                
-                if (pointsChange > 0) {
-                    try {
-                        await this.hpService.addEvent(
-                            sub.userId.toString(),
-                            courseId,
-                            'BONUS',
-                            pointsChange,
-                            `Activity auto-graded: ${activity.title}`,
-                            activity.createdBy.toString()
-                        );
-                        await this.activityRepo.updateSubmissionGrade(activity._id!, sub.userId, pointsChange);
-                    } catch (e: any) {
-                        console.error(`[ActivityService] Error auto-grading submission for ${sub.userId} on ${activity._id}:`, e);
+            const isGracePeriodOver = now > absoluteDeadline;
+            const courseId = activity.courseId?.toString() || (activity.courseId as any).toString();
+            const courseVersionId = activity.courseVersionId?.toString() || (activity.courseVersionId as any).toString();
+
+            // ── Grade existing submissions ──
+            if (activity.submissions && activity.submissions.length > 0) {
+                for (const sub of activity.submissions) {
+                    if (sub.hpAwarded !== undefined) continue;
+                    
+                    const submittedAtDate = new Date(sub.submittedAt);
+                    const isLate = submittedAtDate > deadlineDate;
+                    const isTooLate = submittedAtDate > absoluteDeadline;
+
+                    if (isTooLate) {
+                        await this.activityRepo.updateSubmissionGrade(activity._id!, sub.userId, 0);
+                        continue;
+                    }
+
+                    let pointsChange = 0;
+                    if (activity.rewardType === 'PERCENTAGE') {
+                        const currentRecord = await this.hpService.getHealthPoints(sub.userId.toString(), courseId);
+                        const currentHP = currentRecord?.currentHP ?? 1000;
+                        pointsChange = (currentHP * activity.rewardValue) / 100;
+                    } else {
+                        pointsChange = activity.rewardValue || 0;
+                    }
+
+                    if (isLate && activity.mandatory && activity.penaltyType && activity.penaltyValue) {
+                        if (activity.penaltyType === 'PERCENTAGE') {
+                            pointsChange = pointsChange * (1 - activity.penaltyValue / 100);
+                        } else if (activity.penaltyType === 'ABSOLUTE') {
+                            pointsChange = pointsChange - activity.penaltyValue;
+                        }
+                        if (pointsChange < 0) pointsChange = 0;
+                    }
+
+                    // Apply graceRewardPercentage if specified instead of penalty (alternative late rule)
+                    if (isLate && activity.graceRewardPercentage !== undefined && (!activity.mandatory || !activity.penaltyType)) {
+                        pointsChange = pointsChange * (activity.graceRewardPercentage / 100);
+                        if (pointsChange < 0) pointsChange = 0;
+                    }
+
+                    pointsChange = Math.round(pointsChange * 100) / 100;
+
+                    if (pointsChange > 0) {
+                        try {
+                            await this.hpService.addEvent(
+                                sub.userId.toString(),
+                                courseId,
+                                'BONUS',
+                                pointsChange,
+                                `Activity auto-graded: ${activity.title}`,
+                                activity.createdBy.toString()
+                            );
+                            await this.activityRepo.updateSubmissionGrade(activity._id!, sub.userId, pointsChange);
+                        } catch (e: any) {
+                            console.error(`[ActivityService] Error auto-grading submission for ${sub.userId} on ${activity._id}:`, e);
+                        }
+                    } else {
+                        await this.activityRepo.updateSubmissionGrade(activity._id!, sub.userId, 0);
                     }
                 }
             }
+
+            // ── Penalize non-submitters for mandatory activities once grace period is over ──
+            if (isGracePeriodOver && activity.mandatory && activity.penaltyType && activity.penaltyValue) {
+                try {
+                    const enrollments = await this.enrollmentRepo.getEnrollmentsByCourseVersion(courseId, courseVersionId);
+                    const submittedUserIds = new Set(
+                        (activity.submittedUsers || []).map(id => id.toString())
+                    );
+
+                    for (const enrollment of enrollments) {
+                        const studentId = enrollment.userId.toString();
+                        if (submittedUserIds.has(studentId)) continue;
+
+                        // Check if this student was already penalized (tracked via submission record)
+                        const alreadyPenalized = activity.submissions?.some(
+                            s => s.userId.toString() === studentId
+                        );
+                        if (alreadyPenalized) continue;
+
+                        let penaltyAmount = 0;
+                        if (activity.penaltyType === 'ABSOLUTE') {
+                            penaltyAmount = activity.penaltyValue;
+                        } else if (activity.penaltyType === 'PERCENTAGE') {
+                            const currentRecord = await this.hpService.getHealthPoints(studentId, courseId);
+                            const currentHP = currentRecord?.currentHP ?? 1000;
+                            penaltyAmount = (currentHP * activity.penaltyValue) / 100;
+                        }
+
+                        penaltyAmount = Math.round(penaltyAmount * 100) / 100;
+
+                        if (penaltyAmount > 0) {
+                            try {
+                                await this.hpService.addEvent(
+                                    studentId,
+                                    courseId,
+                                    'PENALTY',
+                                    -penaltyAmount,
+                                    `Missed mandatory activity: ${activity.title}`,
+                                    activity.createdBy.toString()
+                                );
+                                console.log(`[ActivityService] Penalized ${studentId} with -${penaltyAmount} BP for missing ${activity.title}`);
+                            } catch (e: any) {
+                                console.error(`[ActivityService] Error penalizing ${studentId} for ${activity._id}:`, e);
+                            }
+                        }
+                    }
+                } catch (e: any) {
+                    console.error(`[ActivityService] Error fetching enrollments for penalty on ${activity._id}:`, e);
+                }
+            }
             
-            await this.activityRepo.markAsAutomaticallyGraded(activity._id!);
+            if (isGracePeriodOver) {
+                await this.activityRepo.markAsAutomaticallyGraded(activity._id!);
+            }
         }
     }
 }
