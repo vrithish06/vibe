@@ -542,15 +542,27 @@ export function useUpdateActivity() {
 
 export function useSubmitActivity() {
   return useMutation({
-    mutationFn: async (activityId: string) => {
+    mutationFn: async ({ activityId, file }: { activityId: string; file?: File }) => {
       const token = localStorage.getItem("firebase-auth-token");
       const url = `${import.meta.env.VITE_BASE_URL}/activities/${activityId}/submit`;
+      
+      const headers: HeadersInit = {
+        'Authorization': `Bearer ${token}`
+      };
+      
+      let body: FormData | undefined = undefined;
+      
+      if (file) {
+        body = new FormData();
+        body.append('proof', file);
+      } else {
+        headers['Content-Type'] = 'application/json';
+      }
+
       const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+        headers,
+        body
       });
       if (!res.ok) {
         let msg = 'Failed to submit activity';

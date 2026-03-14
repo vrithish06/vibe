@@ -26,21 +26,24 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
         activityType: initialData?.activityType || 'ASSIGNMENT',
         deadline: initialData?.deadline ? new Date(initialData.deadline).toISOString().slice(0, 16) : '',
         rewardType: initialData?.rewardType || 'ABSOLUTE',
-        rewardValue: initialData?.rewardValue ?? 10,
+        // Store numeric fields as strings so the number input works correctly
+        // (prevents the "010" issue when the user types after a 0)
+        rewardValue: String(initialData?.rewardValue ?? 10),
         mandatory: initialData?.mandatory ?? initialData?.isMandatory ?? false,
         penaltyType: initialData?.penaltyType || 'PERCENTAGE',
-        penaltyValue: initialData?.penaltyValue ?? 0,
+        penaltyValue: String(initialData?.penaltyValue ?? 0),
         submissionMode: initialData?.submissionMode || 'IN_PLATFORM',
         status: initialData?.status || 'PUBLISHED',
-        gracePeriodDuration: initialData?.gracePeriodDuration ?? 0,
-        graceRewardPercentage: initialData?.graceRewardPercentage ?? 100
+        isProofRequired: initialData?.isProofRequired ?? true, // default to true
+        gracePeriodDuration: String(initialData?.gracePeriodDuration ?? 0),
+        graceRewardPercentage: String(initialData?.graceRewardPercentage ?? 100)
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        const { name, value, type } = e.target;
+        const { name, value } = e.target;
         setFormData(prev => ({
             ...prev,
-            [name]: type === 'number' ? Number(value) : value
+            [name]: value // always store as string; we convert on submit
         }));
     };
 
@@ -70,10 +73,15 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
                 ...formData,
                 isMandatory: formData.mandatory,
                 mandatory: formData.mandatory,
+                // Convert string-stored numeric fields back to numbers before sending
+                rewardValue: Number(formData.rewardValue),
+                penaltyValue: Number(formData.penaltyValue),
+                gracePeriodDuration: Number(formData.gracePeriodDuration),
+                graceRewardPercentage: Number(formData.graceRewardPercentage),
                 deadline: new Date(formData.deadline).toISOString(),
                 // Send null for penalty fields when mandatory is false to clear them in backend
                 penaltyType: formData.mandatory ? formData.penaltyType : null,
-                penaltyValue: formData.mandatory ? formData.penaltyValue : null,
+                penaltyValue: formData.mandatory ? Number(formData.penaltyValue) : null,
             };
 
             // Only send parent IDs for new activities (POST)
@@ -186,6 +194,13 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
                             <div className="flex items-center space-x-2">
                                 <Switch id="mandatory" checked={formData.mandatory} onCheckedChange={(c) => handleSwitchChange('mandatory', c)} />
                                 <Label htmlFor="mandatory" className="cursor-pointer">Mandatory Activity</Label>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 flex flex-col justify-center pt-6">
+                            <div className="flex items-center space-x-2">
+                                <Switch id="isProofRequired" checked={formData.isProofRequired} onCheckedChange={(c) => handleSwitchChange('isProofRequired', c)} />
+                                <Label htmlFor="isProofRequired" className="cursor-pointer">Proof Required</Label>
                             </div>
                         </div>
 

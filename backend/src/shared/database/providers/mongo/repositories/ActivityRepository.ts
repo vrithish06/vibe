@@ -132,12 +132,22 @@ export class ActivityRepository {
         return result.modifiedCount > 0;
     }
 
-    async addSubmittedUser(id: string | ObjectId, userId: string | ObjectId, session?: ClientSession): Promise<boolean> {
+    async addSubmittedUser(id: string | ObjectId, userId: string | ObjectId, proofUrl?: string, session?: ClientSession): Promise<boolean> {
         await this.init();
+        
+        const submissionRecord = {
+            userId: new ObjectId(userId),
+            submittedAt: new Date(),
+            ...(proofUrl && { proofUrl })
+        };
+
         const result = await this.activitiesCollection.updateOne(
             { _id: new ObjectId(id) },
             {
-                $addToSet: { submittedUsers: new ObjectId(userId) },
+                $addToSet: { 
+                    submittedUsers: new ObjectId(userId),
+                    submissions: submissionRecord as any
+                },
                 $set: { updatedAt: new Date() }
             },
             { session }

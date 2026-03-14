@@ -143,9 +143,8 @@ export class ActivityService {
             const isComp = activity.submittedUsers?.some(id => {
                 const idStr = id.toString();
                 const userStr = user.userId.toString();
-                // console.log(`[ActivityService] comparing stored ${idStr} with requested ${userStr}`);
                 return idStr === userStr;
-            }) || false;
+            }) || activity.submissions?.some(sub => sub.userId.toString() === user.userId.toString()) || false;
 
             return {
                 ...activity,
@@ -183,6 +182,7 @@ export class ActivityService {
     async submitActivity(
         user: AuthenticatedUser,
         activityId: string,
+        proofUrl?: string,
         session?: ClientSession
     ) {
         // Get the activity
@@ -246,7 +246,7 @@ export class ActivityService {
         }
 
         // Mark the activity as submitted by this user
-        await this.activityRepo.addSubmittedUser(activityId, user.userId, session);
+        await this.activityRepo.addSubmittedUser(activityId, user.userId, proofUrl, session);
 
         return {
             success: true,

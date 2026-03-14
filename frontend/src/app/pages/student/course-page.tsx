@@ -247,6 +247,7 @@ export default function CoursePage() {
   // State for the self-declaration confirmation dialog
   const [showDeclarationDialog, setShowDeclarationDialog] = useState(false);
   const [isDeclarationPending, setIsDeclarationPending] = useState(false);
+  const [proofFile, setProofFile] = useState<File | null>(null);
 
   // Mutation for submitting activities
   const submitActivityMutation = useSubmitActivity();
@@ -2166,11 +2167,27 @@ export default function CoursePage() {
                           <p className="text-sm text-muted-foreground">
                             Please confirm that you have genuinely completed <strong>"{selectedActivity.title}"</strong>.
                           </p>
+                          
+                          {selectedActivity.isProofRequired && (
+                            <div className="space-y-2 pt-2">
+                              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                Proof File Required <span className="text-red-500">*</span>
+                              </label>
+                              <input 
+                                type="file" 
+                                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                              />
+                            </div>
+                          )}
                         </div>
                         <div className="flex justify-end gap-3 pt-2">
                           <Button
                             variant="outline"
-                            onClick={() => setShowDeclarationDialog(false)}
+                            onClick={() => {
+                                setShowDeclarationDialog(false);
+                                setProofFile(null);
+                            }}
                             disabled={isDeclarationPending}
                           >
                             Cancel
@@ -2179,15 +2196,24 @@ export default function CoursePage() {
                             className="bg-green-600 hover:bg-green-700 text-white"
                             disabled={isDeclarationPending}
                             onClick={async () => {
+                              if (selectedActivity.isProofRequired && !proofFile) {
+                                toast.error('Proof file is required to submit this activity.', { position: 'top-right' });
+                                return;
+                              }
+
                               setIsDeclarationPending(true);
                               try {
                                 // Submit activity and award HP
-                                const result = await submitActivityMutation.mutateAsync(getIdStr(selectedActivity._id));
+                                const result = await submitActivityMutation.mutateAsync({
+                                  activityId: getIdStr(selectedActivity._id),
+                                  file: proofFile || undefined
+                                });
 
                                 // Mark locally as acknowledged
                                 setAcknowledgedActivities(prev => ({ ...prev, [getIdStr(selectedActivity._id)]: true }));
 
                                 setShowDeclarationDialog(false);
+                                setProofFile(null);
 
                                 // Show success with HP awarded
                                 toast.success(
