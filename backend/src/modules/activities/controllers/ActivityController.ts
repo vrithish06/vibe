@@ -165,4 +165,26 @@ export class ActivityController {
             stream.on('error', reject);
         });
     }
+    @Authorized()
+    @Get('/:id/submissions')
+    async getSubmissions(
+        @CurrentUser() user: IUser,
+        @Req() req: any,
+        @Param('id') id: string
+    ) {
+        const authUser = await this.buildAuthenticatedUser(user);
+        return this.activityService.getSubmissions(authUser, id, req.session);
+    }
+
+    @Authorized()
+    @Post('/:id/grade')
+    async gradeSubmissions(
+        @CurrentUser() user: IUser,
+        @Req() req: any,
+        @Param('id') id: string,
+        @Body() body: { grades: { userId: string, hpAwarded: number }[] }
+    ) {
+        const authUser = await this.buildAuthenticatedUser(user);
+        return this.activityService.gradeSubmissions(authUser, id, body.grades, req.session);
+    }
 }

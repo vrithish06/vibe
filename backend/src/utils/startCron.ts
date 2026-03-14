@@ -1,5 +1,6 @@
 import { getFromContainer } from 'routing-controllers';
 import { DeleteCronService } from '#root/modules/courses/services/deleteCronService.js';
+import { ActivityCronService } from '#root/modules/activities/services/ActivityCronService.js';
 import { initJobs } from '#root/bootstrap/jobs/index.js';
 
 export const startCron = () => {
@@ -11,10 +12,9 @@ export const startCron = () => {
 
     console.log('✅ Delete cron job scheduled successfully');
 
-    // deleteCronService.scheduleProgressUpdateCron();
-
-    // console.log('✅ Progress update cron job scheduled successfully');
+    const activityCronService = getFromContainer(ActivityCronService);
+    activityCronService.scheduleActivityCron();
   } catch (error) {
-    console.error('❌ Failed to initialize delete cron service:', error);
+    console.error('❌ Failed to initialize cron services:', error);
   }
 };

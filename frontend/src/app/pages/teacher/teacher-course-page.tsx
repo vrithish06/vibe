@@ -58,6 +58,7 @@ import { useAuthStore } from "@/store/auth-store";
 import { toast } from "sonner";
 import Loader from "@/components/Loader";
 import { Label } from "@/components/ui/label";
+import { ActivitySubmissions } from "./components/ActivitySubmissions";
 import ProjectItem from "./components/ProjectItem";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup, SidebarResizablePanel } from "@/components/ui/resizable";
 import FeedbackFormEditor from "./FeedbackFormEditor";
@@ -245,11 +246,12 @@ function TeacherCourseContent() {
   const [isVisible, setIsVisible] = useState(true);
   const [selectedItem, setSelectedItem] = useState({ id: "", name: "" });
 
-  // State for project modal
   const [showAddProjectModal, setShowAddProjectModal] = useState<{
     moduleId: string;
     sectionId: string;
   } | null>(null);
+
+  const [showActivitySubmissionsModal, setShowActivitySubmissionsModal] = useState<any>(null);
 
   const [errors, setErrors] = useState({
     title: "",
@@ -2515,6 +2517,11 @@ function TeacherCourseContent() {
                           {isUpdatingActivity ? '...' : 'Publish'}
                         </Button>
                       )}
+                      {selectedEntity.data.hpAssignmentMode === 'MANUAL' && (
+                        <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowActivitySubmissionsModal(selectedEntity.data)}>
+                          View Submissions
+                        </Button>
+                      )}
                       <Button variant="outline" size="sm"
                         onClick={() => setSelectedEntity({ type: "edit_activity", data: selectedEntity.data })}
                       >
@@ -2548,6 +2555,14 @@ function TeacherCourseContent() {
                         isDestructive={true}
                         isLoading={isDeletingActivity}
                       />
+                      
+                      {showActivitySubmissionsModal && (
+                        <ActivitySubmissions
+                          activityId={getIdStr(showActivitySubmissionsModal._id) || showActivitySubmissionsModal.id}
+                          activityTitle={showActivitySubmissionsModal.title || showActivitySubmissionsModal.name}
+                          onClose={() => setShowActivitySubmissionsModal(null)}
+                        />
+                      )}
                     </div>
                   </div>
 
@@ -2589,6 +2604,12 @@ function TeacherCourseContent() {
                         <div className="p-4 rounded-lg border bg-card">
                           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Submission Mode</h4>
                           <p className="text-sm capitalize">{selectedEntity.data.submissionMode?.replace(/_/g, ' ')}</p>
+                        </div>
+                      )}
+                      {selectedEntity.data.hpAssignmentMode && (
+                        <div className="p-4 rounded-lg border bg-card">
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">HP Assignment</h4>
+                          <p className="text-sm capitalize">{selectedEntity.data.hpAssignmentMode}</p>
                         </div>
                       )}
                     </div>

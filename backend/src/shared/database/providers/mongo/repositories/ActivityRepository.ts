@@ -154,4 +154,69 @@ export class ActivityRepository {
         );
         return result.modifiedCount > 0;
     }
+
+    async getSubmissionsWithUserDetails(id: string | ObjectId, session?: ClientSession): Promise<any[]> {
+        await this.init();
+        
+        const activityId = new ObjectId(id);
+        
+        const pipeline = [
+            { $match: { _id: activityId, isDeleted: { $ne: true } } },
+            { $unwind: "$submissions" },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "submissions.userId",
+                    foreignField: "_id",
+                    as: "user"
+                }
+            },
+            { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    _id: 0,
+                    userId: { $toString: "$submissions.userId" },
+                    proofUrl: "$submissions.proofUrl",
+                    submittedAt: "$submissions.submittedAt",
+                    hpAwarded: "$submissions.hpAwarded",
+                    firstName: "$user.firstName",
+                    lastName: "$user.lastName",
+                    email: "$user.email"
+                }
+            }
+        ];
+
+        return this.activitiesCollection.aggregate(pipeline, { session }).toArray();
+    }
+
+    async updateSubmissionGrade(id: string | ObjectId, userId: string | ObjectId, hpAwarded: number, session?: ClientSession): Promise<boolean> {
+        await this.init();
+        const result = await this.activitiesCollection.updateOne(
+            { _id: new ObjectId(id), "submissions.userId": new ObjectId(userId) },
+            { 
+               $set: { "submissions.$.hpAwarded": hpAwarded, updatedAt: new Date() }
+            },
+            { session }
+        );
+        return result.modifiedCount > 0;
+    }
+    async findForAutomaticGrading(): Promise<IActivity[]> {
+        await this.init();
+        return this.activitiesCollection.find({
+            hpAssignmentMode: 'AUTOMATIC',
+            isAutomaticallyGraded: { $ne: true },
+            status: 'PUBLISHED',
+            deadline: { $lte: new Date() },
+            isDeleted: { $ne: true }
+        }).toArray();
+    }
+
+    async markAsAutomaticallyGraded(id: string | ObjectId): Promise<boolean> {
+        await this.init();
+        const result = await this.activitiesCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { isAutomaticallyGraded: true, updatedAt: new Date() } }
+        );
+        return result.modifiedCount > 0;
+    }
 }

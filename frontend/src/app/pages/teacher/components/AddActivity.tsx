@@ -6,8 +6,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Info } from "lucide-react";
 import { useAuthStore } from '@/store/auth-store';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface AddActivityProps {
     courseId: string;
@@ -35,6 +41,7 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
         submissionMode: initialData?.submissionMode || 'IN_PLATFORM',
         status: initialData?.status || 'PUBLISHED',
         isProofRequired: initialData?.isProofRequired ?? true, // default to true
+        hpAssignmentMode: initialData?.hpAssignmentMode || 'AUTOMATIC',
         gracePeriodDuration: String(initialData?.gracePeriodDuration ?? 0),
         graceRewardPercentage: String(initialData?.graceRewardPercentage ?? 100)
     });
@@ -75,7 +82,6 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
                 mandatory: formData.mandatory,
                 // Convert string-stored numeric fields back to numbers before sending
                 rewardValue: Number(formData.rewardValue),
-                penaltyValue: Number(formData.penaltyValue),
                 gracePeriodDuration: Number(formData.gracePeriodDuration),
                 graceRewardPercentage: Number(formData.graceRewardPercentage),
                 deadline: new Date(formData.deadline).toISOString(),
@@ -164,6 +170,33 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
                         </div>
 
                         <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="hpAssignmentMode">HP Assignment Mode</Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Info className="h-4 w-4 text-muted-foreground cursor-pointer" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="max-w-[300px]">
+                                            <p className="text-sm">
+                                                <strong>Automatic:</strong> Health points will be assigned automatically based on the reward configurations once the deadline passes.
+                                                <br /><br />
+                                                <strong>Manual:</strong> You must assign the health points manually from the Dashboard's "View Submissions" view for each student.
+                                            </p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <Select value={formData.hpAssignmentMode} onValueChange={(v) => handleSelectChange('hpAssignmentMode', v)}>
+                                <SelectTrigger><SelectValue placeholder="Select HP mode" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="AUTOMATIC">Automatic</SelectItem>
+                                    <SelectItem value="MANUAL">Manual</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
                             <Label htmlFor="status">Status</Label>
                             <Select value={formData.status} onValueChange={(v) => handleSelectChange('status', v)}>
                                 <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
@@ -228,7 +261,7 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
                             <Input id="gracePeriodDuration" name="gracePeriodDuration" type="number" value={formData.gracePeriodDuration} onChange={handleChange} min={0} />
                         </div>
 
-                        {formData.gracePeriodDuration > 0 && (
+                        {Number(formData.gracePeriodDuration) > 0 && (
                             <div className="space-y-2">
                                 <Label htmlFor="graceRewardPercentage">Grace Reward (%)</Label>
                                 <Input id="graceRewardPercentage" name="graceRewardPercentage" type="number" value={formData.graceRewardPercentage} onChange={handleChange} min={0} max={100} />

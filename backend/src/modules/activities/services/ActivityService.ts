@@ -211,7 +211,11 @@ export class ActivityService {
         const courseId = activity.courseId?.toString() || (activity.courseId as any as ObjectId).toString();
         let hpAwarded = 0;
 
-        if (activity.rewardValue != null && activity.rewardValue > 0) {
+        // If HP Assignment mode is MANUAL or it's AUTOMATIC (and will be handled by cron later), we might skip awarding immediately.
+        // But for backwards compatibility, if hpAssignmentMode is missing, we still award here.
+        // Wait, "if teacher selects it as manual... in automatic mode if dead line is 14 march 12 pm then after 12 pm all students automatically get..."
+        // Lets just disable immediate grading if it's MANUAL.
+        if (activity.hpAssignmentMode !== 'MANUAL' && activity.rewardValue != null && activity.rewardValue > 0) {
             try {
                 let pointsChange = 0;
 
@@ -259,5 +263,109 @@ export class ActivityService {
                 rewardType: activity.rewardType
             }
         };
+    }
+
+    async getSubmissions(
+        user: AuthenticatedUser,
+        activityId: string,
+        session?: ClientSession
+    ) {
+        const activity = await this.activityRepo.findById(activityId, session);
+        if (!activity) {
+            throw new NotFoundError('Activity not found');
+        }
+
+        if (!this.hasTeacherAccess(user, activity.courseVersionId as string)) {
+            throw new ForbiddenError('Only teachers can view submissions');
+        }
+
+        return this.activityRepo.getSubmissionsWithUserDetails(activityId, session);
+    }
+
+    async gradeSubmissions(
+        user: AuthenticatedUser,
+        activityId: string,
+        grades: { userId: string, hpAwarded: number }[],
+        session?: ClientSession
+    ) {
+        const activity = await this.activityRepo.findById(activityId, session);
+        if (!activity) {
+            throw new NotFoundError('Activity not found');
+        }
+
+        if (!this.hasTeacherAccess(user, activity.courseVersionId as string)) {
+            throw new ForbiddenError('Only teachers can grade submissions');
+        }
+
+        const courseId = activity.courseId?.toString() || (activity.courseId as any as ObjectId).toString();
+
+        // Process all grades
+        for (const grade of grades) {
+            // Update submission record
+            await this.activityRepo.updateSubmissionGrade(activityId, grade.userId, grade.hpAwarded, session);
+
+            // Give HP to user if hpAwarded > 0
+            if (grade.hpAwarded > 0) {
+                try {
+                    await this.hpService.addEvent(
+                        grade.userId,
+                        courseId,
+                        'BONUS', // or custom event type
+                        grade.hpAwarded,
+                        `Activity graded: ${activity.title}`,
+                        user.userId,
+                        session
+                    );
+                } catch (hpError: any) {
+                    console.error(`[ActivityService] HP manual award failed for user ${grade.userId} on activity ${activityId}:`, hpError?.message || hpError);
+                }
+            }
+        }
+
+        return { success: true, message: 'Grades successfully updated.' };
+    }
+
+    async processAutomaticActivityHP() {
+        const activities = await this.activityRepo.findForAutomaticGrading();
+        for (const activity of activities) {
+            if (!activity.submissions || activity.submissions.length === 0) {
+                await this.activityRepo.markAsAutomaticallyGraded(activity._id!);
+                continue;
+            }
+
+            const courseId = activity.courseId?.toString() || (activity.courseId as any).toString();
+            
+            for (const sub of activity.submissions) {
+                if (sub.hpAwarded !== undefined) continue;
+                
+                let pointsChange = 0;
+                if (activity.rewardType === 'PERCENTAGE') {
+                    // It's tricky without a session, but we will just query getHealthPoints
+                    const currentRecord = await this.hpService.getHealthPoints(sub.userId.toString(), courseId);
+                    const currentHP = currentRecord?.currentHP ?? 1000;
+                    pointsChange = (currentHP * activity.rewardValue) / 100;
+                } else {
+                    pointsChange = activity.rewardValue;
+                }
+                
+                if (pointsChange > 0) {
+                    try {
+                        await this.hpService.addEvent(
+                            sub.userId.toString(),
+                            courseId,
+                            'BONUS',
+                            pointsChange,
+                            `Activity auto-graded: ${activity.title}`,
+                            activity.createdBy.toString()
+                        );
+                        await this.activityRepo.updateSubmissionGrade(activity._id!, sub.userId, pointsChange);
+                    } catch (e: any) {
+                        console.error(`[ActivityService] Error auto-grading submission for ${sub.userId} on ${activity._id}:`, e);
+                    }
+                }
+            }
+            
+            await this.activityRepo.markAsAutomaticallyGraded(activity._id!);
+        }
     }
 }

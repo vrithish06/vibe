@@ -809,9 +809,11 @@ export interface IActivity {
   updatedAt: Date;
   createdBy: string | ObjectId;
   submittedUsers?: (string | ObjectId)[]; // Array of student IDs who have submitted the activity
-  submissions?: { userId: string | ObjectId; proofUrl?: string; submittedAt: Date }[];
+  submissions?: { userId: string | ObjectId; proofUrl?: string; submittedAt: Date; hpAwarded?: number }[];
   isProofRequired?: boolean;
   isDeleted?: boolean;
+  hpAssignmentMode?: 'MANUAL' | 'AUTOMATIC';
+  isAutomaticallyGraded?: boolean;
 }
 
 
