@@ -19,6 +19,8 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
 
   // A local map of student id to HP points to be awarded
   const [grades, setGrades] = useState<Record<string, number | "">>({});
+  // Track previous HP values to show delta
+  const [previousGrades, setPreviousGrades] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchSubmissions();
@@ -34,10 +36,13 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
       setSubmissions(data);
 
       const initialGrades: Record<string, number | ""> = {};
+      const previousGradeMap: Record<string, number> = {};
       data.forEach((s: any) => {
         initialGrades[s.userId] = s.hpAwarded ?? "";
+        previousGradeMap[s.userId] = s.hpAwarded ?? 0;
       });
       setGrades(initialGrades);
+      setPreviousGrades(previousGradeMap);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -108,7 +113,8 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
                     <th className="px-4 py-3 font-semibold">Email</th>
                     <th className="px-4 py-3 font-semibold">Submitted At</th>
                     <th className="px-4 py-3 font-semibold text-center">Submission</th>
-                    <th className="px-4 py-3 font-semibold w-32">HP Assigned</th>
+                    <th className="px-4 py-3 font-semibold w-32">HP to Award</th>
+                    <th className="px-4 py-3 font-semibold w-32">Change</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -165,6 +171,21 @@ export function ActivitySubmissions({ activityId, activityTitle, onClose }: Acti
                           placeholder="Points"
                           className="h-8 text-center"
                         />
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {typeof grades[sub.userId] === 'number' ? (
+                          <span className={`text-sm font-semibold ${
+                            (grades[sub.userId] as number) - previousGrades[sub.userId] > 0 
+                              ? 'text-green-600 dark:text-green-400' 
+                              : (grades[sub.userId] as number) - previousGrades[sub.userId] < 0 
+                              ? 'text-red-600 dark:text-red-400' 
+                              : 'text-gray-500'
+                          }`}>
+                            {(grades[sub.userId] as number) - previousGrades[sub.userId] > 0 ? '+' : ''}{(grades[sub.userId] as number) - previousGrades[sub.userId]}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                       </td>
                     </tr>
                   ))}
