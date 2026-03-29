@@ -43,8 +43,29 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
         isProofRequired: initialData?.isProofRequired ?? true, // default to true
         hpAssignmentMode: initialData?.hpAssignmentMode || 'AUTOMATIC',
         gracePeriodDuration: String(initialData?.gracePeriodDuration ?? 0),
-        graceRewardPercentage: String(initialData?.graceRewardPercentage ?? 100)
+        graceRewardPercentage: String(initialData?.graceRewardPercentage ?? 100),
+        ltiToolId: initialData?.ltiToolId || '',
+        ltiToolName: initialData?.ltiToolName || ''
     });
+
+    React.useEffect(() => {
+        const handleMessage = (event: MessageEvent) => {
+            if (event.data?.type === 'LTI_DEEP_LINK_SUCCESS') {
+                const payload = event.data.payload;
+                if (payload && payload.title) {
+                    toast.success(`Success! Connected to external exam: ${payload.title}`);
+                    setFormData(prev => ({
+                        ...prev,
+                        title: payload.title,
+                        description: payload.text || prev.description,
+                        ltiToolName: payload.title, // Auto-map the tool name to the test name
+                    }));
+                }
+            }
+        };
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, []);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -67,6 +88,11 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
 
         if (!formData.title || !formData.deadline) {
             toast.error("Please fill in all required fields (title, deadline)");
+            return;
+        }
+
+        if (formData.activityType === 'LTI_TOOL' && !formData.ltiToolId) {
+            toast.error("LTI Tool ID is required for External Tool (LTI) activities.");
             return;
         }
 
@@ -148,6 +174,7 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
                                     <SelectItem value="ASSIGNMENT">Assignment</SelectItem>
                                     <SelectItem value="VIBE_MILESTONE">VIBE Milestone</SelectItem>
                                     <SelectItem value="EXTERNAL_IMPORT">External Import</SelectItem>
+                                    <SelectItem value="LTI_TOOL">External Tool (LTI)</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -163,6 +190,56 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        {formData.activityType === 'LTI_TOOL' && (
+                            <>
+                                <div className="space-y-2">
+                                    <Label htmlFor="ltiToolId">LTI Tool ID *</Label>
+                                    <Input id="ltiToolId" name="ltiToolId" value={formData.ltiToolId} onChange={handleChange} placeholder="e.g. tool-1234" required />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="ltiToolName">LTI Tool Name</Label>
+                                    <Input id="ltiToolName" name="ltiToolName" value={formData.ltiToolName} onChange={handleChange} placeholder="e.g. CodeGrader" />
+                                </div>
+                                <div className="space-y-2 pt-2">
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      disabled={!formData.ltiToolId}
+                                      onClick={async () => {
+                                          try {
+                                              const res = await fetch(`${import.meta.env.VITE_BASE_URL}/lti/deep-link-launch/${formData.ltiToolId}`, {
+                                                  method: 'POST',
+                                                  headers: {
+                                                      'Content-Type': 'application/json',
+                                                      Authorization: `Bearer ${useAuthStore.getState().token}`,
+                                                  },
+                                                  body: JSON.stringify({
+                                                      courseId,
+                                                      courseVersionId: versionId,
+                                                      activityTitle: formData.title || formData.ltiToolName
+                                                  })
+                                              });
+                                              const data = await res.json();
+                                              if (data.success && data.launchUrl && data.token) {
+                                                  window.open(`${data.launchUrl}?lti_token=${data.token}`, '_blank', 'width=800,height=600');
+                                              } else {
+                                                  throw new Error(data.error || 'Failed to initiate deep linking');
+                                              }
+                                          } catch (err: any) {
+                                              toast.error(err.message || 'Failed to launch tool');
+                                          }
+                                      }}
+                                      className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200"
+                                    >
+                                      Select Link from External Tool
+                                    </Button>
+                                    <p className="text-xs text-muted-foreground text-center">
+                                      Use the tool ID above to securely connect and select an exam directly.
+                                    </p>
+                                </div>
+                            </>
+                        )}
 
                         <div className="space-y-2">
                             <Label htmlFor="deadline">Deadline *</Label>
