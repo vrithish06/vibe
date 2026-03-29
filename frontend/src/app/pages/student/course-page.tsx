@@ -2321,39 +2321,84 @@ export default function CoursePage() {
 
                       <Separator />
 
-                      {/* Self-declaration section */}
-                      <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-                        <h2 className="text-base font-semibold text-foreground">
-                          Have you completed this activity?
-                        </h2>
-                        <p className="text-sm text-muted-foreground">
-                          Please confirm only if you have genuinely completed the above activity. False declarations may lead to disciplinary action.
-                        </p>
-                        {acknowledgedActivities[getIdStr(selectedActivity._id)] ? (
-                          <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-medium">
-                            <CheckCircle className="h-5 w-5" />
-                            <span>You have declared this activity as completed.</span>
-                          </div>
-                        ) : selectedActivity.deadline && new Date(selectedActivity.deadline) < new Date() ? (
-                          <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-medium">
-                            <AlertCircle className="h-5 w-5" />
-                            <span>The deadline has passed. Submissions are no longer accepted.</span>
-                          </div>
-                        ) : (
-                          <div className="flex gap-3">
+                      {/* Content specific to activity type */}
+                      {selectedActivity.activityType === 'LTI_TOOL' ? (
+                        <div className="rounded-xl border border-border bg-card p-6 space-y-4 text-center">
+                          <h2 className="text-xl font-semibold text-foreground">
+                            External Learning Tool
+                          </h2>
+                          <p className="text-sm text-muted-foreground mx-auto max-w-md">
+                            This activity is hosted on an external platform. Click the button below to launch the tool and complete your work. Your score will be synced back to Vibe automatically.
+                          </p>
+                          <div className="pt-4">
                             <Button
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                              onClick={() => setShowDeclarationDialog(true)}
+                              size="lg"
+                              className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/20"
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`${import.meta.env.VITE_BASE_URL}/lti/launch/${selectedActivity.ltiToolId}/${getIdStr(selectedActivity._id)}`, {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      Authorization: `Bearer ${useAuthStore.getState().token}`,
+                                    },
+                                    body: JSON.stringify({
+                                      courseId: COURSE_ID,
+                                      courseVersionId: VERSION_ID,
+                                      activityTitle: selectedActivity.title,
+                                      role: 'Learner'
+                                    })
+                                  });
+                                  const data = await res.json();
+                                  if (data.success && data.launchUrl && data.token) {
+                                    window.open(`${data.launchUrl}?lti_token=${data.token}`, '_blank');
+                                  } else {
+                                    throw new Error(data.error || 'Failed to initiate tool launch');
+                                  }
+                                } catch (err: any) {
+                                  toast.error(err.message || "Failed to launch tool");
+                                }
+                              }}
                             >
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                              Yes, I've completed it
-                            </Button>
-                            <Button variant="outline" disabled>
-                              No, not yet
+                              <ExternalLink className="mr-2 h-5 w-5" />
+                              Launch {selectedActivity.ltiToolName || 'External Tool'}
                             </Button>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+                          <h2 className="text-base font-semibold text-foreground">
+                            Have you completed this activity?
+                          </h2>
+                          <p className="text-sm text-muted-foreground">
+                            Please confirm only if you have genuinely completed the above activity. False declarations may lead to disciplinary action.
+                          </p>
+                          {acknowledgedActivities[getIdStr(selectedActivity._id)] ? (
+                            <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-medium">
+                              <CheckCircle className="h-5 w-5" />
+                              <span>You have declared this activity as completed.</span>
+                            </div>
+                          ) : selectedActivity.deadline && new Date(selectedActivity.deadline) < new Date() ? (
+                            <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-medium">
+                              <AlertCircle className="h-5 w-5" />
+                              <span>The deadline has passed. Submissions are no longer accepted.</span>
+                            </div>
+                          ) : (
+                            <div className="flex gap-3">
+                              <Button
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                onClick={() => setShowDeclarationDialog(true)}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Yes, I've completed it
+                              </Button>
+                              <Button variant="outline" disabled>
+                                No, not yet
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (

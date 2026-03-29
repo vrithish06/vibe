@@ -781,7 +781,7 @@ export interface TranscriptExplanations {
 }
 
 // Activity Creation System
-export type ActivityType = 'ASSIGNMENT' | 'VIBE_MILESTONE' | 'EXTERNAL_IMPORT';
+export type ActivityType = 'ASSIGNMENT' | 'VIBE_MILESTONE' | 'EXTERNAL_IMPORT' | 'LTI_TOOL';
 export type RewardType = 'ABSOLUTE' | 'PERCENTAGE';
 export type PenaltyType = 'ABSOLUTE' | 'PERCENTAGE';
 export type SubmissionMode = 'IN_PLATFORM' | 'EXTERNAL_LINK' | 'CSV_IMPORT';
@@ -814,6 +814,9 @@ export interface IActivity {
   isDeleted?: boolean;
   hpAssignmentMode?: 'MANUAL' | 'AUTOMATIC';
   isAutomaticallyGraded?: boolean;
+  // LTI Tool fields (only used when activityType === 'LTI_TOOL')
+  ltiToolId?: string;     // ID of the registered LTI tool in LtiPlatformService
+  ltiToolName?: string;   // Human-readable name (denormalised for display)
 }
 
 
