@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { QuizSubmissionDisplay } from "./QuizSubmissionDisplay"
 import { WatchTimeDisplay } from "./WatchTimeDisplay"
 import TimeSlotsModal from "./components/TimeSlotsModal"
+import { BrowniePointsModal } from "./components/BrowniePointsModal"
 import { useStudentCurrentProgressPath } from "@/hooks/hooks"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -191,6 +192,11 @@ export default function CourseEnrollments() {
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
   const [isBulkUnenrollDialogOpen, setIsBulkUnenrollDialogOpen] = useState(false)
   const [isTimeSlotsModalOpen, setIsTimeSlotsModalOpen] = useState(false);
+
+  // Brownie Points Modal State
+  const [isBrowniePointsModalOpen, setIsBrowniePointsModalOpen] = useState(false)
+  const [browniePointsLaunchUrl, setBrowniePointsLaunchUrl] = useState<string>('')
+  const [browniePointsToken, setBrowniePointsToken] = useState<string>('')
 
   // Get URL search params
   const search = useSearch({ strict: false }) as any
@@ -1056,6 +1062,9 @@ export default function CourseEnrollments() {
                 setIsTimeSlotsModalOpen={setIsTimeSlotsModalOpen}
                 timeSlotsData={timeSlotsData}
                 getStudentTimeSlot={getStudentTimeSlot}
+                setIsBrowniePointsModalOpen={setIsBrowniePointsModalOpen}
+                setBrowniePointsLaunchUrl={setBrowniePointsLaunchUrl}
+                setBrowniePointsToken={setBrowniePointsToken}
               />
             </TabsContent>
 
@@ -1078,6 +1087,9 @@ export default function CourseEnrollments() {
                 setIsExporting={setIsExporting}
                 unenrollMutation={unenrollMutation}
                 user={user}
+                setIsBrowniePointsModalOpen={setIsBrowniePointsModalOpen}
+                setBrowniePointsLaunchUrl={setBrowniePointsLaunchUrl}
+                setBrowniePointsToken={setBrowniePointsToken}
                 handleViewProgress={handleViewProgress}
                 handleRemoveStudent={handleRemoveStudent}
                 getRoleBadge={getRoleBadge}
@@ -1863,6 +1875,14 @@ export default function CourseEnrollments() {
         courseId={courseId || ""}
         courseVersionId={versionId || ""}
       />
+
+      {/* Brownie Points Modal */}
+      <BrowniePointsModal
+        isOpen={isBrowniePointsModalOpen}
+        onClose={() => setIsBrowniePointsModalOpen(false)}
+        launchUrl={browniePointsLaunchUrl}
+        token={browniePointsToken}
+      />
     </>
   )
 }
@@ -2055,6 +2075,9 @@ function EnrollmentsTable({
   timeSlotsData,
   getStudentTimeSlot,
   course,
+  setIsBrowniePointsModalOpen,
+  setBrowniePointsLaunchUrl,
+  setBrowniePointsToken,
 }: any) {
   const isInactiveTab = enrollmentTab === "INACTIVE";
 
@@ -2078,12 +2101,17 @@ function EnrollmentsTable({
       });
       const data = await res.json();
       if (data.success && data.launchUrl && data.token) {
-        window.open(`${data.launchUrl}?lti_token=${data.token}&mode=bp_dashboard`, '_blank', 'width=1100,height=700');
+        // Set modal state instead of opening new tab
+        setBrowniePointsLaunchUrl(data.launchUrl);
+        setBrowniePointsToken(data.token);
+        setIsBrowniePointsModalOpen(true);
       } else {
         console.error('[BP Launch]', data.error);
+        toast.error('Failed to launch Brownie Points dashboard');
       }
     } catch (err) {
       console.error('[BP Launch] Failed:', err);
+      toast.error('Error launching Brownie Points dashboard');
     }
   };
 
