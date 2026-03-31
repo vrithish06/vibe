@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, lazy } from "react"
+import { useState, useEffect, ChangeEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
@@ -39,6 +39,7 @@ import { useNavigate } from "@tanstack/react-router"
 import { ProctoringModal } from "@/components/EditProctoringModal"
 import { Pagination } from "@/components/ui/Pagination"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 
 // Import the hooks and auth store
 import {
@@ -320,7 +321,7 @@ export default function TeacherCoursesPage() {
                     disabled={initialDocumentCount === 0}
                     placeholder="Search courses..."
                     value={searchQuery}
-                    onChange={() => handleSearchQueryChange(event)}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleSearchQueryChange(e)}
                     className="pl-10 bg-background border-border focus:border-primary focus:ring-primary/20 transition-all duration-300"
                   />
                 </div>
@@ -396,9 +397,10 @@ function CourseCard({
   const [expandedCourse, setExpandedCourse] = useState(false)
   const [editingCourse, setEditingCourse] = useState(false)
   const [showDeleteCourseModal, setShowDeleteCourseModal] = useState(false);
-  const [editingValues, setEditingValues] = useState<{ name: string; description: string }>({
+  const [editingValues, setEditingValues] = useState<{ name: string; description: string; useExternalBP?: boolean }>({
     name: "",
     description: "",
+    useExternalBP: false,
   })
 
   const [creatingErrors, setCreatingErrors] = useState<{ name?: string; description?: string }>({});
@@ -480,12 +482,13 @@ function CourseCard({
     setEditingValues({
       name: course.name,
       description: course.description,
+      useExternalBP: (course as any).useExternalBP || false,
     })
   }
 
   const cancelEditing = () => {
     setEditingCourse(false)
-    setEditingValues({ name: "", description: "" })
+    setEditingValues({ name: "", description: "", useExternalBP: false })
     setEditingErrors({ name: "", description: "" })
   }
 
@@ -503,6 +506,7 @@ function CourseCard({
         body: {
           name: editingValues.name,
           description: editingValues.description,
+          useExternalBP: editingValues.useExternalBP,
         },
       })
 
@@ -512,7 +516,7 @@ function CourseCard({
       })
 
       setEditingCourse(false)
-      setEditingValues({ name: "", description: "" })
+      setEditingValues({ name: "", description: "", useExternalBP: false })
       setEditingErrors({ name: "", description: "" })
       onInvalidate() // Also invalidate parent queries
     } catch (error) {
@@ -800,6 +804,20 @@ function CourseCard({
                             {editingValues.description.length}/{MAX_DESCRIPTION_LENGTH}
                           </div>
                         </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 border border-border/50 rounded-lg bg-muted/20">
+                        <div className="space-y-1">
+                          <label className="text-sm font-medium text-foreground">
+                            Use External Brownie Points
+                          </label>
+                          <p className="text-xs text-muted-foreground">
+                            Enable LTI-based Brownie Points manager for this course.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={editingValues.useExternalBP}
+                          onCheckedChange={(checked) => setEditingValues(prev => ({ ...prev, useExternalBP: checked }))}
+                        />
                       </div>
                       <div className="flex items-center gap-2">
                         <Button

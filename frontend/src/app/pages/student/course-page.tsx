@@ -2167,14 +2167,14 @@ export default function CoursePage() {
                           <p className="text-sm text-muted-foreground">
                             Please confirm that you have genuinely completed <strong>"{selectedActivity.title}"</strong>.
                           </p>
-                          
+
                           {selectedActivity.isProofRequired && (
                             <div className="space-y-2 pt-2">
                               <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                                 Proof File Required <span className="text-red-500">*</span>
                               </label>
-                              <input 
-                                type="file" 
+                              <input
+                                type="file"
                                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                 onChange={(e) => setProofFile(e.target.files?.[0] || null)}
                               />
@@ -2185,8 +2185,8 @@ export default function CoursePage() {
                           <Button
                             variant="outline"
                             onClick={() => {
-                                setShowDeclarationDialog(false);
-                                setProofFile(null);
+                              setShowDeclarationDialog(false);
+                              setProofFile(null);
                             }}
                             disabled={isDeclarationPending}
                           >

@@ -34,6 +34,7 @@ export interface ICourse {
   instructors: ID[];
   createdAt?: Date;
   updatedAt?: Date;
+  useExternalBP?: boolean;
 }
 
 export type ID = string | ObjectId | null;

@@ -25,6 +25,7 @@ export default function CreateCourse() {
   const [courseDescription, setCourseDescription] = useState("");
   const [versionName, setVersionName] = useState("");
   const [versionDescription, setVersionDescription] = useState("");
+  const [useExternalBP, setUseExternalBP] = useState(false);
 
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +66,8 @@ export default function CreateCourse() {
           name: courseName,
           description: courseDescription,
           versionName,
-          versionDescription
+          versionDescription,
+          useExternalBP
         }
       });
 
@@ -129,6 +131,8 @@ export default function CreateCourse() {
             setCourseDescription={setCourseDescription}
             setCourseName={setCourseName}
             setCreateErrors={setCreateErrors}
+            useExternalBP={useExternalBP}
+            setUseExternalBP={setUseExternalBP}
           />
 
           <CourseVersionMetaForm
@@ -291,7 +295,11 @@ type CourseMetaFormProps = {
   setCourseDescription: (value: string) => void;
   createErrors: CreateErrors;
   setCreateErrors: React.Dispatch<React.SetStateAction<CreateErrors>>;
+  useExternalBP: boolean;
+  setUseExternalBP: (value: boolean) => void;
 };
+
+import { Switch } from "@/components/ui/switch";
 
 export const CourseMetaForm: React.FC<CourseMetaFormProps> = ({
   courseName,
@@ -300,6 +308,8 @@ export const CourseMetaForm: React.FC<CourseMetaFormProps> = ({
   courseDescription,
   setCourseDescription,
   setCreateErrors,
+  useExternalBP,
+  setUseExternalBP,
 }) => {
   return (
     <div className="relative">
@@ -396,6 +406,27 @@ export const CourseMetaForm: React.FC<CourseMetaFormProps> = ({
                 )}
               </div>
             </div>
+
+            <div className="space-y-4 pt-4 border-t border-border mt-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1 w-[80%]">
+                  <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    Use External Brownie Points System (LTI)
+                    <div className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                      Beta
+                    </div>
+                  </Label>
+                  <p className="text-xs text-muted-foreground w-full">
+                    When enabled, the native "Manage Brownie Points" page will be completely replaced by an external LTI Tool integration for this course. Student HP and analytics will be fetched strictly from the connected LMS app.
+                  </p>
+                </div>
+                <Switch 
+                  checked={useExternalBP} 
+                  onCheckedChange={setUseExternalBP}
+                />
+              </div>
+            </div>
+
           </div>
         </div>
       </Card>

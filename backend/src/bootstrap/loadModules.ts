@@ -26,7 +26,8 @@ export async function loadAppModules(moduleName: string): Promise<LoadedModuleRe
   let validators: Function[] = [];
   const allContainerModules: ContainerModule[] = [];
 
-  for (const file of files) {
+    for (const file of files) {
+    console.log(`[Bootstrap] Loading Vibe module: ${file}`);
     const modulePath = `../modules/${file}/index.js`;
     const moduleExports = await import(modulePath);
 
@@ -57,6 +58,9 @@ export async function loadAppModules(moduleName: string): Promise<LoadedModuleRe
     const inversifyAdapter = new InversifyAdapter(container);
     useContainer(inversifyAdapter);
   }
+
+  console.log(`[Bootstrap] Total loaded controllers: ${controllers.length}`);
+  controllers.forEach(c => console.log(`[Bootstrap]   -> ${c.name}`));
 
   return { controllers, validators };
 }

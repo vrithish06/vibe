@@ -662,7 +662,7 @@ export function useChangePassword(): {
 // POST /courses/
 export function useCreateCourse(): {
   mutate: (variables: { body: components['schemas']['CreateCourseBody'] }) => void,
-  mutateAsync: (variables: { body: { name: string, description: string, versionName: string, versionDescription: string } }) => Promise<components['schemas']['CourseDataResponse']>,
+  mutateAsync: (variables: { body: { name: string, description: string, versionName: string, versionDescription: string, useExternalBP?: boolean } }) => Promise<components['schemas']['CourseDataResponse']>,
   data: components['schemas']['CourseDataResponse'] | undefined,
   error: string | null,
   isPending: boolean,
@@ -769,8 +769,8 @@ export function useStudentCurrentProgressPath(
 
 // PATCH /courses/{id}
 export function useUpdateCourse(): {
-  mutate: (variables: { params: { path: { id: string } }, body: components['schemas']['UpdateCourseBody'] }) => void,
-  mutateAsync: (variables: { params: { path: { id: string } }, body: components['schemas']['UpdateCourseBody'] }) => Promise<components['schemas']['CourseDataResponse']>,
+  mutate: (variables: { params: { path: { id: string } }, body: components['schemas']['UpdateCourseBody'] & { useExternalBP?: boolean } }) => void,
+  mutateAsync: (variables: { params: { path: { id: string } }, body: components['schemas']['UpdateCourseBody'] & { useExternalBP?: boolean } }) => Promise<components['schemas']['CourseDataResponse']>,
   data: components['schemas']['CourseDataResponse'] | undefined,
   error: string | null,
   isPending: boolean,

@@ -8,22 +8,84 @@ import {
     CurrentUser,
     Res,
     Req,
+    UnauthorizedError,
+    Param,
 } from 'routing-controllers';
 import { LtiPlatformService, LtiLaunchPayload } from '../services/LtiPlatformService.js';
 import { IUser } from '#shared/interfaces/models.js';
 import { appConfig } from '#root/config/app.js';
+import { GLOBAL_TYPES } from '#root/types.js';
+import type { IUserRepository } from '#root/shared/index.js';
+import { MongoDatabase } from '#root/shared/database/providers/mongo/MongoDatabase.js';
+import { ObjectId } from 'mongodb';
 
 @JsonController('/lti')
 @injectable()
 export class LtiPlatformController {
     constructor(
-        @inject(LtiPlatformService) private ltiPlatformService: LtiPlatformService
-    ) { }
+        @inject(LtiPlatformService) private ltiPlatformService: LtiPlatformService,
+        @inject(GLOBAL_TYPES.Database) private db: MongoDatabase,
+    ) { 
+        console.log('✅ LTI Platform Controller Initialized');
+    }
+
+    /**
+     * GET /api/lti/ping
+     */
+    @Get('/ping')
+    async ping() {
+        return { status: 'LTI Controller is alive' };
+    }
+
+    /**
+     * GET /api/lti/nrps/:courseId
+     */
+    @Get('/nrps/:courseId')
+    async getNrpsRoster(@Req() req: any, @Param('courseId') courseId: string) {
+        console.log(`[Vibe] Incoming NRPS request for course: ${courseId}`);
+        const secret = req.headers['x-lti-secret'];
+        const expected = process.env.LTI_SHARED_SECRET || 'vibe-lti-shared-secret-change-in-production';
+
+        if (!secret || secret !== expected) {
+            console.error('[Vibe] NRPS Auth failed: Secret mismatch');
+            throw new UnauthorizedError('Invalid or missing x-lti-secret header');
+        }
+
+        const enrollmentCollection = await this.db.getCollection<any>('enrollment');
+        const courseCollection = await this.db.getCollection<any>('newCourse');
+        
+        const course = await courseCollection.findOne({ _id: new ObjectId(courseId) });
+        const courseName = course?.name || 'Unknown Course';
+
+        const enrollments = await enrollmentCollection
+            .find({
+                courseId: new ObjectId(courseId),
+                role: 'STUDENT',
+                status: 'ACTIVE',
+                isDeleted: { $ne: true },
+            })
+            .project({ userId: 1, _id: 0 })
+            .toArray();
+
+        // Get user repo from di container to ensure correctly typed queries
+        const userRepo: any = req.container?.get(GLOBAL_TYPES.UserRepo) 
+            || (await import('#root/bootstrap/loadModules.js').then(m => m.getContainer().get(GLOBAL_TYPES.UserRepo)));
+
+        const stringIds = enrollments.map((e: any) => e.userId.toString());
+        const users = await userRepo.getUsersByIds(stringIds);
+
+        const members = users.map((u: any) => ({
+            userId: u._id.toString(),
+            name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Unknown Student',
+            email: u.email || '',
+        }));
+
+        console.log(`[Vibe] NRPS returning ${members.length} members for course ${courseName} (${courseId})`);
+        return { members, courseName };
+    }
 
     /**
      * GET /api/lti/jwks
-     * Exposes Vibe's public RSA key.
-     * The external tool (lTI_System) uses this to validate the JWT Vibe sends.
      */
     @Get('/jwks')
     async getJwks() {
@@ -32,8 +94,6 @@ export class LtiPlatformController {
 
     /**
      * POST /api/lti/launch/:toolId/:activityId
-     * Called by Vibe frontend when a student clicks "Launch Tool".
-     * Returns a signed JWT + the tool's launch URL so the frontend can redirect.
      */
     @Authorized()
     @Post('/launch/:toolId/:activityId')
@@ -52,7 +112,6 @@ export class LtiPlatformController {
 
         let tool = this.ltiPlatformService.getToolById(toolId);
         if (!tool) {
-            console.log(`[LTI] Tool ${toolId} not found in memory. Using auto-fallback to http://localhost:5174/`);
             tool = {
                 _id: toolId,
                 name: 'Auto Discovered Tool',
@@ -65,7 +124,6 @@ export class LtiPlatformController {
         const userId = (user as any).userId || user._id?.toString();
         const userEmail = (user as any).email || '';
         const userName = (user as any).name || (user as any).fullName || 'Student';
-
         const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
 
         const payload: LtiLaunchPayload = {
@@ -91,7 +149,6 @@ export class LtiPlatformController {
 
     /**
      * POST /api/lti/deep-link-launch/:toolId
-     * Called by Vibe frontend when teacher wants to create/select content.
      */
     @Authorized()
     @Post('/deep-link-launch/:toolId')
@@ -131,23 +188,17 @@ export class LtiPlatformController {
 
         return {
             success: true,
-            launchUrl: tool.launchUrl, // the tool should handle routing based on message_type in the token
+            launchUrl: tool.launchUrl,
             token,
         };
     }
 
     /**
      * POST /api/lti/deep-link-return/:toolId/:courseId/:courseVersionId
-     * The LTI Tool POSTs back here with the selected content.
-     * In a real implementation, you would decode the JWT sent by the tool,
-     * extract the content_items, and inject them into Vibe's ActivityService.
      */
     @Post('/deep-link-return/:toolId/:courseId/:courseVersionId')
     async deepLinkReturn(@Req() req: any, @Res() res: any, @Body() body: any) {
-        // This is a placeholder showing where Vibe receives the finalized content from the Tool.
-        const JWT = body.JWT; // The signed payload from the tool containing the items
-        console.log(`[LTI] Deep link return received for tool ${req.params.toolId}`, body);
-        // Extract details (in MVP the JWT is just a raw JSON string or decoded object from the Tool)
+        const JWT = body.JWT;
         let parsedPayload: any = {};
         if (JWT) {
             try {
@@ -160,8 +211,6 @@ export class LtiPlatformController {
         const items = parsedPayload?.['https://purl.imsglobal.org/spec/lti-dl/claim/content_items'] || [];
         const selectedItem = items[0] || { title: 'LTI Activity' };
 
-        // Support both form POSTs (return HTML script) and AJAX POSTs (return JSON)
-        // Since Vibe backend may not have urlencoded parser, we'll return robust JSON for the frontend to handle
         if (req.headers.accept && req.headers.accept.includes('application/json')) {
              return { success: true, item: selectedItem };
         }

@@ -1028,6 +1028,7 @@ export default function CourseEnrollments() {
             {/* Active Tab */}
             <TabsContent value="ACTIVE" className="mt-4">
               <EnrollmentsTable
+                course={course}
                 totalDocuments={totalDocuments}
                 studentEnrollments={filteredStudentEnrollments}
                 enrollmentsLoading={enrollmentsLoading}
@@ -1061,6 +1062,7 @@ export default function CourseEnrollments() {
             {/* Inactive Tab */}
             <TabsContent value="INACTIVE" className="mt-4">
               <EnrollmentsTable
+                course={course}
                 totalDocuments={totalDocuments}
                 studentEnrollments={studentEnrollments}
                 enrollmentsLoading={enrollmentsLoading}
@@ -2052,9 +2054,39 @@ function EnrollmentsTable({
   setIsTimeSlotsModalOpen,
   timeSlotsData,
   getStudentTimeSlot,
+  course,
 }: any) {
-  const navigate = useNavigate();
-  const isInactiveTab = enrollmentTab === "INACTIVE"
+  const isInactiveTab = enrollmentTab === "INACTIVE";
+
+  // ── BP Dashboard Launch ──────────────────────────────────────────────────────
+  const launchBpDashboard = async () => {
+    try {
+      const token = useAuthStore.getState().token;
+      const toolId = import.meta.env.VITE_LTI_TOOL_ID || 'default-lti-tool';
+      const res = await fetch(`${import.meta.env.VITE_BASE_URL}/lti/launch/${toolId}/bp-management`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          courseId: course?._id || course?.courseId,
+          courseVersionId: course?.versions?.[0] || '',
+          activityTitle: 'Brownie Points Management',
+          role: 'Instructor',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.launchUrl && data.token) {
+        window.open(`${data.launchUrl}?lti_token=${data.token}&mode=bp_dashboard`, '_blank', 'width=1100,height=700');
+      } else {
+        console.error('[BP Launch]', data.error);
+      }
+    } catch (err) {
+      console.error('[BP Launch] Failed:', err);
+    }
+  };
+
 
   // Helper function to check if student is already assigned to any timeslot
   const isStudentAlreadyAssigned = (studentId: string) => {
@@ -2103,17 +2135,17 @@ function EnrollmentsTable({
             <span>Configure Time Slots</span>
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              navigate({ to: '/teacher/courses/healthPoints' });
-            }}
-            className="flex items-center gap-2"
-          >
-            <Heart className="h-4 w-4" />
-            <span>Manage Brownie Points</span>
-          </Button>
+          {course?.useExternalBP && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={launchBpDashboard}
+              className="flex items-center gap-2"
+            >
+              <Heart className="h-4 w-4" />
+              <span>Manage Brownie Points</span>
+            </Button>
+          )}
 
           {/* Select Students Button - Only for Active Students */}
           {!isInactiveTab && (

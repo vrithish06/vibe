@@ -37,7 +37,14 @@ class EditCourseBody implements Partial<ICourse> {
   @IsNotEmpty()
   @IsString()
   @MaxLength(1000)
-  description: string;
+  @JSONSchema({
+    title: 'Use External Brownie Points System (LTI)',
+    description: 'Whether to use an external LTI tool to manage brownie points instead of the native system.',
+    example: false,
+    type: 'boolean',
+  })
+  @IsOptional()
+  useExternalBP?: boolean;
 }
 class CourseBody implements Partial<ICourse> {
   @JSONSchema({
@@ -60,8 +67,16 @@ class CourseBody implements Partial<ICourse> {
   })
   @IsNotEmpty()
   @IsString()
-  @MaxLength(1000)
   description: string;
+
+  @JSONSchema({
+    title: 'Use External Brownie Points System (LTI)',
+    description: 'Whether to use an external LTI tool to manage brownie points instead of the native system.',
+    example: false,
+    type: 'boolean',
+  })
+  @IsOptional()
+  useExternalBP?: boolean;
 
   @JSONSchema({
     title: 'Course Version Name',
@@ -258,8 +273,14 @@ class CourseDataResponse implements ICourse {
     format: 'date-time',
     readOnly: true,
   })
-  @IsNotEmpty()
   updatedAt?: Date | null;
+
+  @JSONSchema({
+    description: 'Whether the course uses an external LTI tool for Brownie Points.',
+    type: 'boolean',
+  })
+  @IsOptional()
+  useExternalBP?: boolean;
 }
 
 class CourseNotFoundErrorResponse {

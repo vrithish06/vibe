@@ -271,7 +271,7 @@ Accessible to:
       );
     }
     const courseBeforeUpdate = await this.courseService.readCourse(courseId);
-    const updatedCourse = await this.courseService.updateCourse(courseId, body);
+    const updatedCourse = await this.courseService.updateCourse(courseId, body as any);
     const lastIndex = updatedCourse.versions.length - 1 || 0;
     setAuditTrail(req, {
       category: AuditCategory.COURSE,
