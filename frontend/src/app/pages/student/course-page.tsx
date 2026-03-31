@@ -252,6 +252,29 @@ export default function CoursePage() {
   // Mutation for submitting activities
   const submitActivityMutation = useSubmitActivity();
 
+  useEffect(() => {
+    const fetchTrueTime = async () => {
+      try {
+        const res = await fetch('https://timeapi.io/api/Time/current/zone?timeZone=Asia/Kolkata');
+        const data = await res.json();
+        if (data && data.dateTime) {
+          (window as any).trueTimeNow = new Date(data.dateTime);
+        } else {
+          (window as any).trueTimeNow = new Date();
+        }
+      } catch (e) {
+        (window as any).trueTimeNow = new Date();
+      }
+    };
+    fetchTrueTime();
+    const interval = setInterval(() => {
+      if ((window as any).trueTimeNow) {
+        (window as any).trueTimeNow = new Date((window as any).trueTimeNow.getTime() + 10000);
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
 
   // State to track when we're waiting for next section items to load
   const [waitingForNextSection, setWaitingForNextSection] = useState<{
@@ -1726,7 +1749,7 @@ export default function CoursePage() {
                                 const isSelected = selectedActivityId === actId;
                                 const isDone = acknowledgedActivities[actId];
                                 const deadlineDate = activity.deadline ? new Date(activity.deadline) : null;
-                                const isOverdue = deadlineDate && deadlineDate < new Date() && !isDone;
+                                const isOverdue = deadlineDate && deadlineDate < ((window as any).trueTimeNow || new Date()) && !isDone;
                                 return (
                                   <button
                                     key={actId}
@@ -2277,7 +2300,7 @@ export default function CoursePage() {
                       {selectedActivity.deadline && (() => {
                         const dl = new Date(selectedActivity.deadline);
                         const isCompleted = acknowledgedActivities[getIdStr(selectedActivity._id)];
-                        const overdue = dl < new Date() && !isCompleted;
+                        const overdue = dl < ((window as any).trueTimeNow || new Date()) && !isCompleted;
                         return (
                           <div className={`flex items-center gap-3 p-4 rounded-lg border ${overdue ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' : 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800'}`}>
                             <AlertCircle className={`h-5 w-5 flex-shrink-0 ${overdue ? 'text-red-500' : 'text-blue-500'}`} />

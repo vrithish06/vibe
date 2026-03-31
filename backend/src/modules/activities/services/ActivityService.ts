@@ -6,6 +6,7 @@ import { ObjectId, ClientSession } from 'mongodb';
 import { AuthenticatedUser } from '#shared/interfaces/models.js';
 import { HealthPointsService } from '../../../modules/healthPoints/services/HealthPointsService.js';
 import { EnrollmentRepository } from '#shared/database/providers/mongo/repositories/EnrollmentRepository.js';
+import { TimeUtils } from '../../../shared/utils/TimeUtils.js';
 
 @injectable()
 export class ActivityService {
@@ -203,6 +204,16 @@ export class ActivityService {
             throw new ForbiddenError('This activity is not available for submission');
         }
 
+        // Check if submission is past the absolute deadline (including any grace period)
+        const now = await TimeUtils.getTrueTime(); // Secure centralized IST time
+        const deadlineDate = new Date(activity.deadline);
+        const gracePeriodHours = activity.gracePeriodDuration || 0;
+        const absoluteDeadline = new Date(deadlineDate.getTime() + gracePeriodHours * 60 * 60 * 1000);
+
+        if (now > absoluteDeadline) {
+            throw new BadRequestError('Submission rejected: The deadline for this activity has passed.');
+        }
+
         // Check if user already submitted
         const hasSubmitted = activity.submittedUsers?.some(userId => userId.toString() === user.userId);
         if (hasSubmitted) {
@@ -308,7 +319,7 @@ export class ActivityService {
                 (sub: any) => sub.userId?.toString() === grade.userId.toString()
             );
             const previousHpAwarded = submission?.hpAwarded ?? 0;
-            
+
             // Calculate the change (difference between new and previous)
             const hpChange = grade.hpAwarded - previousHpAwarded;
 
@@ -344,7 +355,7 @@ export class ActivityService {
             const deadlineDate = new Date(activity.deadline);
             const gracePeriodHours = activity.gracePeriodDuration || 0;
             const absoluteDeadline = new Date(deadlineDate.getTime() + gracePeriodHours * 60 * 60 * 1000);
-            
+
             const isGracePeriodOver = now > absoluteDeadline;
             const courseId = activity.courseId?.toString() || (activity.courseId as any).toString();
             const courseVersionId = activity.courseVersionId?.toString() || (activity.courseVersionId as any).toString();
@@ -353,7 +364,7 @@ export class ActivityService {
             if (activity.submissions && activity.submissions.length > 0) {
                 for (const sub of activity.submissions) {
                     if (sub.hpAwarded !== undefined) continue;
-                    
+
                     const submittedAtDate = new Date(sub.submittedAt);
                     const isLate = submittedAtDate > deadlineDate;
                     const isTooLate = submittedAtDate > absoluteDeadline;
@@ -458,7 +469,7 @@ export class ActivityService {
                     console.error(`[ActivityService] Error fetching enrollments for penalty on ${activity._id}:`, e);
                 }
             }
-            
+
             if (isGracePeriodOver) {
                 await this.activityRepo.markAsAutomaticallyGraded(activity._id!);
             }

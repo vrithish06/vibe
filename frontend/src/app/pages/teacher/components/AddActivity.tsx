@@ -30,7 +30,7 @@ export function AddActivity({ courseId, versionId, onSuccess, onCancel, initialD
         title: initialData?.title || '',
         description: initialData?.description || '',
         activityType: initialData?.activityType || 'ASSIGNMENT',
-        deadline: initialData?.deadline ? new Date(initialData.deadline).toISOString().slice(0, 16) : '',
+        deadline: initialData?.deadline ? new Date(new Date(initialData.deadline).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '',
         rewardType: initialData?.rewardType || 'ABSOLUTE',
         // Store numeric fields as strings so the number input works correctly
         // (prevents the "010" issue when the user types after a 0)
