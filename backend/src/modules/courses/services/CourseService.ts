@@ -124,7 +124,7 @@ class CourseService extends BaseService {
 
   async updateCourse(
     id: string,
-    data: Pick<Course, 'name' | 'description'>,
+    data: Pick<Course, 'name' | 'description' | 'useExternalBP'>,
   ): Promise<Course> {
     return this._withTransaction(async session => {
       const updatedCourse = await this.courseRepo.update(id, data, session);

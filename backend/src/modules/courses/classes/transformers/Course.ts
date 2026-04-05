@@ -97,10 +97,20 @@ class Course implements ICourse {
   })
   updatedAt?: Date;
 
+  @Expose()
+  @JSONSchema({
+    title: 'Use External Brownie Points System (LTI)',
+    description: 'Whether to use an external LTI tool to manage brownie points instead of the native system.',
+    example: false,
+    type: 'boolean',
+  })
+  useExternalBP?: boolean;
+
   constructor(courseBody?: CourseBody) {
     if (courseBody) {
       this.name = courseBody.name;
       this.description = courseBody.description;
+      this.useExternalBP = courseBody.useExternalBP || false;
     }
 
     this.versions = [];

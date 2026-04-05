@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useCourseVersionById, useUserProgress, useItemsBySectionId, useItemById, useProctoringSettings, useGetProcotoringSettings, useSubmitFlag, enqueueNavigation, useSkipOptionalItem, useRecalculateStudentProgress, useActivitiesForStudent, useSubmitActivity } from "@/hooks/hooks";
+import { useCourseVersionById, useUserProgress, useItemsBySectionId, useItemById, useProctoringSettings, useGetProcotoringSettings, useSubmitFlag, enqueueNavigation, useSkipOptionalItem, useRecalculateStudentProgress, useActivitiesForStudent, useSubmitActivity, useCourseById } from "@/hooks/hooks";
 import { useAuthStore } from "@/store/auth-store";
 import { useCourseStore } from "@/store/course-store";
 import { Link, Navigate, useRouter } from "@tanstack/react-router";
@@ -57,7 +57,7 @@ import { useModuleProgress } from "@/hooks/hooks";
 import { isMobile } from "react-device-detect";
 import MobileFallbackScreen from "@/components/MobileFallbackScreen";
 import StudentHealthPoints from "./components/StudentHealthPoints";
-
+import StudentExternalHealthPoints from "./components/StudentExternalHealthPoints";
 // Helper: extract a plain string from a MongoDB _id ({ $oid: '...' }, ObjectId instances, or plain string)
 const getIdStr = (id: any): string => {
   if (!id) return '';
@@ -112,6 +112,8 @@ export default function CoursePage() {
   const router = useRouter();
   const COURSE_ID = useCourseStore.getState().currentCourse?.courseId || "";
   const VERSION_ID = useCourseStore.getState().currentCourse?.versionId || "";
+  const { data: fetchedCourse } = useCourseById(COURSE_ID, !!COURSE_ID);
+  const isExternalBP = fetchedCourse?.useExternalBP || false;
   const { getSettings, settingLoading: proctoringLoading } = useGetProcotoringSettings();
 
   const [isFlagModalOpen, setIsFlagModalOpen] = useState(false);
@@ -1824,19 +1826,21 @@ export default function CoursePage() {
                 {/* Navigation Footer */}
                 <SidebarFooter className="border-t border-border/40 bg-gradient-to-t from-sidebar/80 to-sidebar/60">
                   <SidebarMenu className="space-y-1 pl-2 py-3">
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        onClick={() => setShowBrowniePoints(true)}
-                        className={`h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm ${showBrowniePoints ? 'bg-accent/20 text-accent-foreground font-semibold' : ''}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-1 rounded-md bg-accent/15">
-                            <Activity className="h-4 w-4 text-accent-foreground" />
+                    {isExternalBP && (
+                      <SidebarMenuItem>
+                        <SidebarMenuButton
+                          onClick={() => setShowBrowniePoints(true)}
+                          className={`h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm ${showBrowniePoints ? 'bg-accent/20 text-accent-foreground font-semibold' : ''}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="p-1 rounded-md bg-accent/15">
+                              <Activity className="h-4 w-4 text-accent-foreground" />
+                            </div>
+                            <span className="text-sm font-medium">Brownie Points</span>
                           </div>
-                          <span className="text-sm font-medium">Brownie Points</span>
-                        </div>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )}
 
                     <SidebarMenuItem>
                       <SidebarMenuButton
@@ -2099,7 +2103,7 @@ export default function CoursePage() {
                   isSubmitting={isPending}
                 />
                 {showBrowniePoints ? (
-                  <StudentHealthPoints courseId={COURSE_ID} />
+                  isExternalBP ? <StudentExternalHealthPoints courseId={COURSE_ID} /> : <StudentHealthPoints courseId={COURSE_ID} />
                 ) : currentItem ? (
                   <div className="relative z-10 h-full flex flex-col mb-2  sm:mb-1">
                     <div className="flex justify-end mb-1 me-10 gap-2 ">

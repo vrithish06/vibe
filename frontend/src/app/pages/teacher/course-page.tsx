@@ -422,15 +422,13 @@ function CourseCard({
   // 1. Use course from enrollment if available
   const localCourse = enrollment?.course;
   const localCourseVersionDetails = enrollment?.course?.versionDetails;
-  // 2. Fetch from API only if not present in enrollment
-  const { data: fetchedCourse, isLoading: courseLoading, error: courseError } = useCourseById(courseIdHex,
-    !localCourse ? true : false
-  );
+  // 2. Always fetch full course from API for complete data (localCourse from enrollment may be missing fields like useExternalBP)
+  const { data: fetchedCourse, isLoading: courseLoading, error: courseError } = useCourseById(courseIdHex, !!courseIdHex);
 
-  // 3. Choose final course value
-  const course = localCourse || fetchedCourse;
+  // 3. Merge: use local for display speed, but fetchedCourse has complete fields
+  const course = localCourse ? { ...localCourse, ...fetchedCourse } : fetchedCourse;
 
-  if (courseLoading) {
+  if (courseLoading && !course) {
     return (
       <div className="relative">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl blur-sm"></div>
@@ -482,7 +480,7 @@ function CourseCard({
     setEditingValues({
       name: course.name,
       description: course.description,
-      useExternalBP: (course as any).useExternalBP || false,
+      useExternalBP: fetchedCourse?.useExternalBP ?? false,
     })
   }
 

@@ -809,6 +809,12 @@ export interface components {
              * @example 2023-10-01T12:00:00Z
              */
             readonly updatedAt: string;
+            /**
+             * Use External Brownie Points System (LTI)
+             * @description Whether to use an external LTI tool to manage brownie points instead of the native system.
+             * @example false
+             */
+            useExternalBP?: boolean;
         };
         CourseNotFoundErrorResponse: {
             /**
