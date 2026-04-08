@@ -37,6 +37,8 @@ class EditCourseBody implements Partial<ICourse> {
   @IsNotEmpty()
   @IsString()
   @MaxLength(1000)
+  description: string;
+
   @JSONSchema({
     title: 'Use External Brownie Points System (LTI)',
     description: 'Whether to use an external LTI tool to manage brownie points instead of the native system.',

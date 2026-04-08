@@ -125,7 +125,7 @@ export class LtiPlatformController {
 
         const userId = (user as any).userId || user._id?.toString();
         const userEmail = (user as any).email || '';
-        const userName = (user as any).name || (user as any).fullName || 'Student';
+        const userName = `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim() || (user as any).name || (user as any).fullName || (body.role === 'Instructor' ? 'Instructor' : 'Student');
         const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
 
         const payload: LtiLaunchPayload = {
@@ -138,6 +138,48 @@ export class LtiPlatformController {
             activityTitle: body.activityTitle,
             role: body.role || 'Learner',
             toolId,
+        };
+
+        const token = await this.ltiPlatformService.generateLaunchToken(payload, vibeBaseUrl);
+
+        return {
+            success: true,
+            launchUrl: tool.launchUrl,
+            token,
+        };
+    }
+
+    /**
+     * POST /api/lti/student-bp-launch/:courseId
+     * Generates an LTI token for a student to view their Brownie Points dashboard.
+     */
+    @Authorized()
+    @Post('/student-bp-launch/:courseId')
+    async studentBpLaunch(
+        @CurrentUser() user: IUser,
+        @Req() req: any,
+    ) {
+        const courseId = req.params.courseId;
+
+        const tool = {
+            launchUrl: 'http://localhost:5174/',
+        };
+
+        const userId = (user as any).userId || user._id?.toString();
+        const userEmail = (user as any).email || '';
+        const userName = `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim() || 'Student';
+        const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
+
+        const payload: LtiLaunchPayload = {
+            userId,
+            userEmail,
+            userName,
+            courseId,
+            courseVersionId: '',
+            activityId: 'bp-student-view',
+            activityTitle: 'Brownie Points',
+            role: 'Learner',
+            toolId: 'bp-tool',
         };
 
         const token = await this.ltiPlatformService.generateLaunchToken(payload, vibeBaseUrl);
@@ -173,7 +215,7 @@ export class LtiPlatformController {
 
         const userId = (user as any).userId || user._id?.toString();
         const userEmail = (user as any).email || '';
-        const userName = (user as any).name || (user as any).fullName || 'Instructor';
+        const userName = `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim() || (user as any).name || (user as any).fullName || 'Instructor';
         const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
 
         const payload = {
