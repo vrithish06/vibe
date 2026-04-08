@@ -1,11 +1,12 @@
 import { useStudentSelfHealthPoints } from "@/hooks/useHealthPoints";
+import { useExternalBrowniePoints } from "@/hooks/hooks";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Activity, ShieldCheck, TrendingDown, Target, Zap, ServerCrash } from "lucide-react";
+import { Activity, ShieldCheck, Target, Zap, ServerCrash, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import React from "react";
+
 
 function StatusBadge({ status }: { status: string }) {
     const getStatusColor = (status: string) => {
@@ -24,10 +25,115 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
-export default function StudentHealthPoints({ courseId }: { courseId: string }) {
-    const { data: healthData, isLoading, error } = useStudentSelfHealthPoints(courseId);
+interface StudentHealthPointsProps {
+    courseId: string;
+    /** When true, Brownie Points are fetched from the LTI backend instead of VIBE */
+    useExternalBP?: boolean;
+}
 
-    if (isLoading) {
+/**
+ * Shows the student's Brownie Points.
+ *
+ * • useExternalBP = false (default): reads from VIBE's own HP database.
+ * • useExternalBP = true: reads from the LTI backend via the
+ *   /student/courses/healthPoints/external proxy endpoint.
+ */
+export default function StudentHealthPoints({ courseId, useExternalBP = false }: StudentHealthPointsProps) {
+    // Always call both hooks but only use the relevant one based on the flag.
+    // React hooks must not be called conditionally.
+    const vibe = useStudentSelfHealthPoints(courseId);
+    const external = useExternalBrowniePoints(courseId, useExternalBP);
+
+    // ── External BP mode ──────────────────────────────────────────────────────
+    if (useExternalBP) {
+        if (external.isLoading) {
+            return (
+                <div className="flex-1 w-full bg-background/50 h-full overflow-y-auto overflow-x-hidden p-6">
+                    <div className="max-w-4xl mx-auto space-y-6">
+                        <Skeleton className="h-12 w-64" />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Skeleton className="h-40 w-full" />
+                            <Skeleton className="h-40 w-full" />
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        if (!external.data) {
+            return (
+                <div className="flex-1 w-full bg-background/50 h-full p-6 flex flex-col items-center justify-center text-center">
+                    <ExternalLink className="h-16 w-16 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground max-w-sm">
+                        This course uses External Brownie Points managed by the LTI system.
+                        Your record hasn't been created yet — it will appear after your first activity submission.
+                    </p>
+                </div>
+            );
+        }
+
+        const { current_hp, updated_at } = external.data;
+        return (
+            <div className="flex-1 w-full bg-background/50 h-full overflow-y-auto overflow-x-hidden">
+                <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-4 text-center md:text-left">
+                            <div className="p-4 rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 border border-primary/20">
+                                <Activity className="h-8 w-8 text-primary" />
+                            </div>
+                            <div>
+                                <h1 className="text-3xl font-bold text-foreground drop-shadow-sm">Brownie Points</h1>
+                                <p className="text-muted-foreground mt-1 text-sm flex items-center gap-1">
+                                    <ExternalLink className="h-3 w-3" />
+                                    Managed by the LTI system
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Card className="border-border/50 shadow-md">
+                            <CardHeader className="pb-4">
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <ShieldCheck className="w-5 h-5 text-green-500" /> Your Brownie Points Score
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-4">
+                                    <div className="flex items-end gap-2">
+                                        <span className="text-5xl font-black text-primary drop-shadow-sm">
+                                            {Math.round(current_hp)}
+                                        </span>
+                                        <span className="text-sm font-semibold text-muted-foreground mb-1">BP</span>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        Last Updated: {updated_at ? new Date(updated_at).toLocaleDateString() : 'N/A'}
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-border/50 shadow-md">
+                            <CardHeader className="pb-4">
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <Target className="w-5 h-5 text-blue-500" /> Source
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-sm text-muted-foreground">
+                                    Your Brownie Points for this course are tracked and managed by an external
+                                    LTI system. Activity submissions here automatically update your balance.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Internal VIBE BP mode ─────────────────────────────────────────────────
+    if (vibe.isLoading) {
         return (
             <div className="flex-1 w-full bg-background/50 h-full overflow-y-auto overflow-x-hidden p-6">
                 <div className="max-w-4xl mx-auto space-y-6">
@@ -41,7 +147,7 @@ export default function StudentHealthPoints({ courseId }: { courseId: string }) 
         );
     }
 
-    if (error || !healthData) {
+    if (vibe.error || !vibe.data) {
         return (
             <div className="flex-1 w-full bg-background/50 h-full p-6 flex flex-col items-center justify-center text-center">
                 <ServerCrash className="h-16 w-16 text-muted-foreground mb-4" />
@@ -50,7 +156,7 @@ export default function StudentHealthPoints({ courseId }: { courseId: string }) 
         );
     }
 
-    const { healthPoints, events, averageHP } = healthData;
+    const { healthPoints, events, averageHP } = vibe.data;
 
     return (
         <div className="flex-1 w-full bg-background/50 h-full overflow-y-auto overflow-x-hidden">
@@ -170,6 +276,6 @@ export default function StudentHealthPoints({ courseId }: { courseId: string }) 
                     </CardContent>
                 </Card>
             </div>
-        </div >
+        </div>
     );
 }

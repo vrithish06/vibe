@@ -15,6 +15,7 @@ import { ActivityRepository } from '#shared/database/providers/mongo/repositorie
 
 import { HealthPointsRepository } from '#shared/database/providers/mongo/repositories/HealthPointsRepository.js';
 import { AuditTrailsHandler } from '#root/shared/middleware/auditTrails.js';
+import { LtiSyncService } from '#shared/services/LtiSyncService.js';
 
 
 export const sharedContainerModule = new ContainerModule(options => {
@@ -42,6 +43,8 @@ export const sharedContainerModule = new ContainerModule(options => {
   options.bind(HealthPointsRepository).toSelf().inSingletonScope();
   options.bind(ActivityRepository).toSelf().inSingletonScope();
   options.bind(AuditTrailsHandler).toSelf().inSingletonScope();
+  // LTI integration — registered once here to avoid duplicate-binding errors
+  options.bind(LtiSyncService).toSelf().inSingletonScope();
 
   // Other
   options.bind(HttpErrorHandler).toSelf().inSingletonScope();

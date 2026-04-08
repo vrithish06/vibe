@@ -1753,10 +1753,40 @@ export default function CoursePage() {
                                 return (
                                   <button
                                     key={actId}
-                                    onClick={() => {
+                                    onClick={async () => {
+                                      // For every activity, launch the LTI frontend to show the activity detail
+                                      try {
+                                        const token = localStorage.getItem('firebase-auth-token');
+                                        // Use a stable toolId; the backend auto-discovers the LTI tool if not registered
+                                        const toolId = activity.ltiToolId || 'vibe-lti-tool';
+                                        const res = await fetch(
+                                          `${import.meta.env.VITE_BASE_URL}/lti/launch/${toolId}/${actId}`,
+                                          {
+                                            method: 'POST',
+                                            headers: {
+                                              'Content-Type': 'application/json',
+                                              Authorization: `Bearer ${token}`,
+                                            },
+                                            body: JSON.stringify({
+                                              courseId: COURSE_ID,
+                                              courseVersionId: VERSION_ID,
+                                              activityTitle: activity.title,
+                                              role: 'Learner',
+                                            }),
+                                          }
+                                        );
+                                        const data = await res.json();
+                                        if (data.success && data.launchUrl && data.token) {
+                                          // Open the LTI frontend in the SAME window (mandatory per requirements)
+                                          window.location.href = `${data.launchUrl}?lti_token=${data.token}&mode=activity_detail`;
+                                          return; // Don't fall through to VIBE panel
+                                        }
+                                      } catch (err) {
+                                        console.warn('[LTI Launch] Failed, falling back to VIBE panel:', err);
+                                      }
+                                      // Fallback: show the built-in VIBE activity detail panel
                                       setSelectedActivityId(actId);
                                       setShowBrowniePoints(false);
-                                      // Clear any selected course item and hide current item view
                                       setSelectedItemId(null);
                                       setCurrentItem(null);
                                     }}
@@ -2099,7 +2129,10 @@ export default function CoursePage() {
                   isSubmitting={isPending}
                 />
                 {showBrowniePoints ? (
-                  <StudentHealthPoints courseId={COURSE_ID} />
+                  <StudentHealthPoints
+                    courseId={COURSE_ID}
+                    useExternalBP={(courseVersionData as any)?.useExternalBP || false}
+                  />
                 ) : currentItem ? (
                   <div className="relative z-10 h-full flex flex-col mb-2  sm:mb-1">
                     <div className="flex justify-end mb-1 me-10 gap-2 ">

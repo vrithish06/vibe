@@ -7,4 +7,7 @@ export const healthPointsContainerModule = new ContainerModule((options) => {
     options.bind(HealthPointsService).toSelf().inSingletonScope();
     options.bind(HealthPointsController).toSelf().inSingletonScope();
     options.bind(StudentHealthPointsController).toSelf().inSingletonScope();
+    // LtiSyncService is registered in sharedContainerModule — do not bind here
 });
+
+

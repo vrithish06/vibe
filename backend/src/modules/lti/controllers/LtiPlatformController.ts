@@ -16,6 +16,7 @@ import { IUser } from '#shared/interfaces/models.js';
 import { appConfig } from '#root/config/app.js';
 import { GLOBAL_TYPES } from '#root/types.js';
 import type { IUserRepository } from '#root/shared/index.js';
+import { ActivityService } from '#root/modules/activities/services/ActivityService.js';
 import { MongoDatabase } from '#root/shared/database/providers/mongo/MongoDatabase.js';
 import { ObjectId } from 'mongodb';
 
@@ -24,6 +25,7 @@ import { ObjectId } from 'mongodb';
 export class LtiPlatformController {
     constructor(
         @inject(LtiPlatformService) private ltiPlatformService: LtiPlatformService,
+        @inject(ActivityService) private activityService: ActivityService,
         @inject(GLOBAL_TYPES.Database) private db: MongoDatabase,
     ) { 
         console.log('✅ LTI Platform Controller Initialized');
@@ -186,6 +188,30 @@ export class LtiPlatformController {
 
         const token = await this.ltiPlatformService.generateDeepLinkingToken(payload, vibeBaseUrl);
 
+        // ── Shift existing activities to LTI (Batch Migration) ──
+        try {
+            const existingActivities = await this.activityService.getActivitiesForTeacher(
+                (user as any), 
+                body.courseVersionId
+            );
+            
+            if (existingActivities && existingActivities.length > 0) {
+                console.log(`[LTI Migration] Detected ${existingActivities.length} activities to sync for course ${body.courseId}`);
+                
+                // We'll re-use the existing sync mechanism in ActivityService
+                // This is slightly redundant but ensures consistency between Vibe and LTI entries.
+                for (const activity of existingActivities) {
+                    await this.activityService.updateActivity(
+                      (user as any), 
+                      (activity._id as any).toString(), 
+                      {} // Empty update triggers a re-sync via updateActivity's logic
+                    ).catch(syncErr => console.error(`[Migration] Sync failed for ${activity.title}:`, syncErr.message));
+                }
+            }
+        } catch (migErr: any) {
+            console.error('[LTI Migration] Global failure:', migErr.message);
+        }
+
         return {
             success: true,
             launchUrl: tool.launchUrl,
@@ -216,6 +242,8 @@ export class LtiPlatformController {
         }
 
         res.setHeader('Content-Type', 'text/html');
+        const vibeCourseUrl = `${process.env.VIBE_FRONTEND_URL || 'http://localhost:5173'}/teacher/courses/view`;
+        
         return res.send(`
             <script>
                 if (window.opener) {
@@ -225,7 +253,8 @@ export class LtiPlatformController {
                     }, '*');
                     window.close();
                 } else {
-                    alert('Content linked. Please close this window.');
+                    // Same-window case mapping: redirect back to Vibe course page
+                    window.location.href = "${vibeCourseUrl}";
                 }
             </script>
         `);

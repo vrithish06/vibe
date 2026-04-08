@@ -7,13 +7,15 @@ import { AuthenticatedUser } from '#shared/interfaces/models.js';
 import { HealthPointsService } from '../../../modules/healthPoints/services/HealthPointsService.js';
 import { EnrollmentRepository } from '#shared/database/providers/mongo/repositories/EnrollmentRepository.js';
 import { TimeUtils } from '../../../shared/utils/TimeUtils.js';
+import { LtiSyncService } from '#shared/services/LtiSyncService.js';
 
 @injectable()
 export class ActivityService {
     constructor(
         @inject(ActivityRepository) private activityRepo: ActivityRepository,
         @inject(HealthPointsService) private hpService: HealthPointsService,
-        @inject(EnrollmentRepository) private enrollmentRepo: EnrollmentRepository
+        @inject(EnrollmentRepository) private enrollmentRepo: EnrollmentRepository,
+        @inject(LtiSyncService) private ltiSync: LtiSyncService
     ) { }
 
     private validateActivityData(data: Partial<IActivity>) {
@@ -50,6 +52,16 @@ export class ActivityService {
         return !!enrollment || user.globalRole === 'admin';
     }
 
+    /**
+     * Maps VIBE activity type strings to the LTI model's ActivityType enum.
+     * Falls back to 'ASSIGNMENT' for any unknown value.
+     */
+    private mapActivityTypeForLti(vibeType: string): 'ASSIGNMENT' | 'VIBE_MILESTONE' | 'LTI_TOOL' {
+        if (vibeType === 'VIBE_MILESTONE') return 'VIBE_MILESTONE';
+        if (vibeType === 'LTI_TOOL') return 'LTI_TOOL';
+        return 'ASSIGNMENT';
+    }
+
     async createActivity(user: AuthenticatedUser, data: Partial<IActivity>, session?: ClientSession) {
         if (!this.hasTeacherAccess(user, data.courseVersionId as string)) {
             throw new ForbiddenError('Only teachers can create activities');
@@ -62,10 +74,26 @@ export class ActivityService {
             data.status = 'DRAFT';
         }
 
-        return this.activityRepo.create({
+        const created = await this.activityRepo.create({
             ...data,
             createdBy: new ObjectId(user.userId)
         }, session);
+
+        // ── Mirror activity into LTI (best-effort, non-fatal) ──
+        this.ltiSync.syncActivity({
+            activity_id: (created._id as any).toString(),
+            course_id: (data.courseId as any)?.toString() || '',
+            title: data.title || '',
+            type: this.mapActivityTypeForLti(data.activityType as string),
+            deadline: data.deadline ? new Date(data.deadline) : null,
+            grace_period: data.gracePeriodDuration ? data.gracePeriodDuration * 60 : 0, // hours → minutes
+            reward_hp: data.rewardType === 'ABSOLUTE' ? data.rewardValue : undefined,
+            late_penalty_hp: data.penaltyType === 'ABSOLUTE' ? data.penaltyValue : undefined,
+            late_penalty_percent: data.penaltyType === 'PERCENTAGE' ? data.penaltyValue : undefined,
+            is_mandatory: data.mandatory,
+        }).catch(err => console.error('[ActivityService] LTI sync failed:', err?.message));
+
+        return created;
     }
 
     async updateActivity(
@@ -88,7 +116,24 @@ export class ActivityService {
             this.validateActivityData(mergedData);
         }
 
-        return this.activityRepo.update(activityId, data, session);
+        const updated = await this.activityRepo.update(activityId, data, session);
+
+        // ── Sync updated activity into LTI (best-effort) ──
+        const merged = { ...activity, ...data };
+        this.ltiSync.syncActivity({
+            activity_id: activityId,
+            course_id: (activity.courseId as any)?.toString() || '',
+            title: merged.title || '',
+            type: this.mapActivityTypeForLti(merged.activityType as string),
+            deadline: merged.deadline ? new Date(merged.deadline) : null,
+            grace_period: merged.gracePeriodDuration ? merged.gracePeriodDuration * 60 : 0,
+            reward_hp: merged.rewardType === 'ABSOLUTE' ? merged.rewardValue : undefined,
+            late_penalty_hp: merged.penaltyType === 'ABSOLUTE' ? merged.penaltyValue : undefined,
+            late_penalty_percent: merged.penaltyType === 'PERCENTAGE' ? merged.penaltyValue : undefined,
+            is_mandatory: merged.mandatory,
+        }).catch(err => console.error('[ActivityService] LTI sync (update) failed:', err?.message));
+
+        return updated;
     }
 
     async deleteActivity(

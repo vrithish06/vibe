@@ -577,7 +577,47 @@ export function useSubmitActivity() {
   });
 }
 
+/**
+ * Fetches Brownie Points from the LTI backend (via VIBE's proxy endpoint).
+ * Should only be called when the course setting `useExternalBP` is true.
+ *
+ * @param courseId  The VIBE course ID
+ * @param enabled   Set to false to skip the query (e.g., when useExternalBP is off)
+ */
+export function useExternalBrowniePoints(courseId: string, enabled: boolean = true): {
+  data: { current_hp: number; updated_at: string } | null;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => void;
+} {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['external-bp', courseId],
+    queryFn: async () => {
+      const token = localStorage.getItem('firebase-auth-token');
+      const res = await fetch(
+        `${import.meta.env.VITE_BASE_URL}/student/courses/healthPoints/external?courseId=${courseId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) {
+        throw new Error('Failed to fetch external Brownie Points');
+      }
+      const json = await res.json();
+      return (json.browniePoints as { current_hp: number; updated_at: string } | null) ?? null;
+    },
+    enabled: !!courseId && enabled,
+    staleTime: 30_000,
+  });
+
+  return {
+    data: data ?? null,
+    isLoading,
+    error: error ? (error as Error).message : null,
+    refetch,
+  };
+}
+
 // POST /auth/google
+
 export function useLoginWithGoogle(): {
   mutate: (variables: { body: { lastName: string, firstName: string, email: string } }) => void,
   mutateAsync: (variables: { body: { lastName: string, firstName: string, email: string } }) => Promise<components['schemas']['SignUpResponse']>,

@@ -1,0 +1,21 @@
+{
+  "privateJwk": {
+    "kty": "RSA",
+    "n": "yaq6u4c7klRLSazXfJ9lSQhsp5oeZslC8Pk_Hq2JFRoF8V2C6U9B-n9iuIJavSUOmM_gUvJAeNT1ur-ASV2ZT7TmWN4MO7g3eWKkjlsISiXCRUclFa1-SwKvBQhb-mbbLHtxvOE8ZcV-S_Wsg8-gM1AsxPrB5CQIfhhMCUuMdnAjlwydJH6TuSTR4Ptvsy5lmxpY4-bWS70rjVOqtv4p4QOAqqyVkvfFoYoSPQ22KF4CorXBVHjbPJawLQpKW08ZUWmLtB0NLliXuBRswI9qrHWPM87hunLo5Uw8xzPZ0GoKAKXuoiy9kxqo2Ml0Z4DoeZRAPweyTpbSzj8vhYT9mQ",
+    "e": "AQAB",
+    "d": "DPJCKxxHIYF6VNg8_DHiZ3IcQZU2Cuy0OLKTkAVddcaWJ5TUfORa7LklTgmGSDq7CWnc8Y4-P9OSE-NL2cnht_l5yS42FFZi7067GC11ZocuhdKHqbDZ2Phq4nSTLQvR2bTyDAlcnn7zeO5kXRDk7K5itWGQtXPvvKKULQuV0JuMg6_kLpvUGUorPqBmX2FEQtT9fKTxjfs-m5cNWkTqr4ZRqMh6avSpBVHjPxanrCyYXVZ3KQHELwFeAlce5Hksc9PgOcVeKxPPthG254rVKmtLQAFIERQmmynNIrNMzXksr5KfNWi5vkuwy99kEGnvkTpsiMtRSRBfjaBTzeBuNQ",
+    "p": "_Ga-CtQEy6AuiQkpkDRPHvf-9j7_MUck7BATjB64TGjZ4woLcJ0UxOpbREhzxDbNJE2As-k8G1JZqHp5Tng9NoRNZKjUwd4_erjtTkF6p1eXHdP4g12J7SeVa1RoUdWKAvKdO_XwwvXW27z1XqkZOsqaesPO7rmrDj3FT0Kh9TU",
+    "q": "zIrO0LabenrCA7ufnPjwTfp70v2YFv1V7yaAukibeuZ2m1rMfGMOrWqwJY_YGZiXPWkw0trhpkwEWZH5hU4Uw_d8QfXISk_umAWnHPWofNrfWGS_tryrqx1LtWmzyQoiS7yGg1yyEwsRYjIxlKsCiT29QgmspJZTdbTLQ3nFp1U",
+    "dp": "uCA3aOzMZsN-zyco8_LE-WGO1JKWVZuB2tfLer96UPt4X8EXIVrmKNSSKdj04uHbey0yw4xU9dV4ZIib79uVRCz1zIXBV4BLLLq1Gw53bJZgPjlBJIvbL29d-ENGKtStboMQowpCTedLi1doZFrVdecRFJe9YLd_is8THkQMpDU",
+    "dq": "X3M7NeyxO4PDvCg3QPJueYU1eW18JuZLztFB6yxs2fpoSPEjUbyMIeMSlkS9DJzHnxHSheM8v_TjZsUXEt0wFY8NPl6q-_q3Fdw1cu80lCczaLWDPYxn8-804FCWZG_FN2CfyPdd5kMY9qEDwCPZiB_2jLWlCh1YjyoyXKeb1A0",
+    "qi": "PGsXAaCLCqiFQ6GL0NKYSqPn5nFgZxfYukylwPQNQ9-wwxjww78dlxGk8VqaD1rZrdeCiTO03FksqgK8JpDEt0veyDxBwT_l_Qx9TK7WFl3IR7h7GuMKXfq4l5ShvLPPXjbdvPAHfcc9NtuqYOv1rrjfSM1kZ5Xq1WFl9w4RdIc"
+  },
+  "publicJwk": {
+    "kty": "RSA",
+    "n": "yaq6u4c7klRLSazXfJ9lSQhsp5oeZslC8Pk_Hq2JFRoF8V2C6U9B-n9iuIJavSUOmM_gUvJAeNT1ur-ASV2ZT7TmWN4MO7g3eWKkjlsISiXCRUclFa1-SwKvBQhb-mbbLHtxvOE8ZcV-S_Wsg8-gM1AsxPrB5CQIfhhMCUuMdnAjlwydJH6TuSTR4Ptvsy5lmxpY4-bWS70rjVOqtv4p4QOAqqyVkvfFoYoSPQ22KF4CorXBVHjbPJawLQpKW08ZUWmLtB0NLliXuBRswI9qrHWPM87hunLo5Uw8xzPZ0GoKAKXuoiy9kxqo2Ml0Z4DoeZRAPweyTpbSzj8vhYT9mQ",
+    "e": "AQAB",
+    "kid": "vibe-lti-key-1",
+    "use": "sig",
+    "alg": "RS256"
+  }
+}

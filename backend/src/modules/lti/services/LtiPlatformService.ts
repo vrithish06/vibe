@@ -1,6 +1,9 @@
 import { injectable } from 'inversify';
 import { generateKeyPair, exportJWK, importJWK, SignJWT } from 'jose';
 import { ObjectId } from 'mongodb';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 export interface LtiTool {
     _id?: string;
@@ -30,18 +33,52 @@ let _publicJwk: any = null;
 // In-memory store for registered tools (in production you'd store these in MongoDB)
 const registeredTools: Map<string, LtiTool> = new Map();
 
+// ── Persistent key helpers ────────────────────────────────────────────────────
+// We persist the JWK pair as JSON next to the .env file so that tokens remain
+// valid across VIBE backend hot-reloads (tsx watch re-requires this module,
+// which would otherwise regenerate keys on every restart).
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const KEY_FILE = path.resolve(__dirname, '../../../../lti-keys.json');
+
+async function loadOrGenerateKeys() {
+    try {
+        if (fs.existsSync(KEY_FILE)) {
+            const { privateJwk, publicJwk } = JSON.parse(fs.readFileSync(KEY_FILE, 'utf-8'));
+            // Import private key for signing; re-use the stored JWK for JWKS endpoint
+            _privateKey = await importJWK(privateJwk, 'RS256');
+            _publicJwk  = { ...publicJwk, kid: 'vibe-lti-key-1', use: 'sig', alg: 'RS256' };
+            console.log('[LTI] Loaded existing RSA key pair from disk.');
+            return;
+        }
+    } catch (e) {
+        console.warn('[LTI] Could not load existing key pair, generating a new one:', (e as Error).message);
+    }
+
+    // Generate new key pair and persist it
+    const { privateKey, publicKey } = await generateKeyPair('RS256', { modulusLength: 2048, extractable: true });
+    _privateKey = privateKey;
+    _publicKey  = publicKey;
+    _publicJwk  = await exportJWK(publicKey);
+    _publicJwk.kid = 'vibe-lti-key-1';
+    _publicJwk.use = 'sig';
+    _publicJwk.alg = 'RS256';
+
+    const privateJwk = await exportJWK(privateKey);
+    try {
+        fs.writeFileSync(KEY_FILE, JSON.stringify({ privateJwk, publicJwk: _publicJwk }, null, 2));
+        console.log('[LTI] Generated and persisted new RSA key pair to disk.');
+    } catch (e) {
+        console.warn('[LTI] Could not persist key pair to disk:', (e as Error).message);
+    }
+}
+
 @injectable()
 export class LtiPlatformService {
 
     async ensureKeys() {
         if (!_privateKey) {
-            const { privateKey, publicKey } = await generateKeyPair('RS256', { modulusLength: 2048 });
-            _privateKey = privateKey;
-            _publicKey = publicKey;
-            _publicJwk = await exportJWK(publicKey);
-            _publicJwk.kid = 'vibe-lti-key-1';
-            _publicJwk.use = 'sig';
-            _publicJwk.alg = 'RS256';
+            await loadOrGenerateKeys();
         }
     }
 
@@ -154,6 +191,12 @@ export class LtiPlatformService {
             'https://purl.imsglobal.org/spec/lti/claim/roles': [
                 'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor'
             ],
+            // Add context (course) so the tool knows where it's being launched from
+            'https://purl.imsglobal.org/spec/lti/claim/context': {
+                id: payload.courseVersionId,
+                label: payload.courseId,
+                type: ['CourseSection'],
+            },
             'https://vibe.learning/custom_claims/activity_title': payload.activityTitle,
             'https://purl.imsglobal.org/spec/lti-dl/claim/deep_linking_settings': {
                 deep_link_return_url: `${vibeBaseUrl}/api/lti/deep-link-return/${payload.toolId}/${payload.courseId}/${payload.courseVersionId}`,

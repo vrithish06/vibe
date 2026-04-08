@@ -2224,7 +2224,36 @@ function TeacherCourseContent() {
                         <Plus className="h-3 w-3 mr-1" />
                         Add Module
                       </Button>
-                      <Button size="sm" variant="secondary" className="w-[250px] text-xs" onClick={() => {
+                      <Button size="sm" variant="secondary" className="w-[250px] text-xs" onClick={async () => {
+                        // Try to launch the LTI deep-link (activity-creation) flow
+                        const token = useAuthStore.getState().token;
+                        const toolId = 'vibe-lti-tool';
+                        try {
+                          const res = await fetch(
+                            `${import.meta.env.VITE_BASE_URL}/lti/deep-link-launch/${toolId}`,
+                            {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: `Bearer ${token}`,
+                              },
+                              body: JSON.stringify({
+                                courseId: courseId || '',
+                                courseVersionId: versionId || '',
+                                activityTitle: '',
+                              }),
+                            }
+                          );
+                          const data = await res.json();
+                          if (data.success && data.launchUrl && data.token) {
+                            // Open LTI frontend in the SAME window — activity creation happens inside LTI
+                            window.location.href = `${data.launchUrl}?lti_token=${data.token}`;
+                            return;
+                          }
+                        } catch (err) {
+                          console.warn('[LTI Deep-Link] Launch failed, falling back to VIBE form:', err);
+                        }
+                        // Fallback: open VIBE's built-in activity creation form
                         setSelectedItem({ id: 'add-activity', name: 'Add Activity' });
                         setSelectedEntity({ type: 'add_activity', data: null, parentIds: null });
                         setMode('default');

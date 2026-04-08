@@ -11,6 +11,7 @@ import { Ability } from '#root/shared/functions/AbilityDecorator.js';
 import { getCourseAbility, CourseActions } from '#courses/abilities/courseAbilities.js';
 import { subject } from '@casl/ability';
 import { IsString, IsNotEmpty } from 'class-validator';
+import { LtiSyncService } from '#shared/services/LtiSyncService.js';
 
 class GetStudentHealthPointsQuery {
     @IsString() @IsNotEmpty() courseId!: string;
@@ -20,7 +21,8 @@ class GetStudentHealthPointsQuery {
 @JsonController('/student/courses/healthPoints')
 export class StudentHealthPointsController {
     constructor(
-        @inject(HealthPointsService) private hpService: HealthPointsService
+        @inject(HealthPointsService) private hpService: HealthPointsService,
+        @inject(LtiSyncService) private ltiSync: LtiSyncService
     ) { }
 
     @Authorized()
@@ -31,7 +33,6 @@ export class StudentHealthPointsController {
     ) {
         try {
             const { courseId } = query;
-            // Check permission - leveraging CourseActions.View ensures enrolled students can access
             if (!ability.can(CourseActions.View, subject('Course', { courseId }))) {
                 throw new ForbiddenError('You do not have permission to view Health Points for this course');
             }
@@ -41,7 +42,6 @@ export class StudentHealthPointsController {
             const hp = await this.hpService.getHealthPoints(studentId, courseId);
             const events = await this.hpService.getEvents(studentId, courseId);
 
-            // Calculate average HP
             const allHPs = await this.hpService.getAllHealthPoints(courseId);
             const validHPs = allHPs.filter(record => record && record.currentHP !== undefined && record.currentHP !== null);
             const averageHP = validHPs.length > 0
@@ -55,9 +55,37 @@ export class StudentHealthPointsController {
             };
         } catch (e: any) {
             console.error("DEBUG ERROR in getHealthPoints:", e);
-            throw e; // We want to see this in logs, or return it? Wait, let's keep throwing it so the user sees it if we fix it.
-            // Wait, I am returning it as 500 still? Let's just return it as a 200 payload with debug details so I can fetch it without Auth!? 
-            // NO, we need Auth to reach here. So we can't test it via curl without a token anyway!
+            throw e;
         }
+    }
+
+    /**
+     * GET /student/courses/healthPoints/external?courseId=<id>
+     *
+     * Returns Brownie Points from the LTI backend.
+     * Called by the frontend when a course has `useExternalBP = true`.
+     * If the LTI system has no record for this student/course yet, returns
+     * { browniePoints: null } so the frontend can display an appropriate message.
+     */
+    @Authorized()
+    @Get('/external')
+    async getBrowniePointsFromLti(
+        @QueryParams() query: GetStudentHealthPointsQuery,
+        @Ability(getCourseAbility) { ability, user }: any
+    ) {
+        const { courseId } = query;
+        if (!ability.can(CourseActions.View, subject('Course', { courseId }))) {
+            throw new ForbiddenError('You do not have permission to view Health Points for this course');
+        }
+
+        const studentId = user._id.toString();
+        const bp = await this.ltiSync.getBrowniePoints(studentId, courseId);
+
+        return {
+            source: 'LTI',
+            courseId,
+            studentId,
+            browniePoints: bp,
+        };
     }
 }
