@@ -2081,7 +2081,7 @@ function EnrollmentsTable({
 }: any) {
   const isInactiveTab = enrollmentTab === "INACTIVE";
 
-  // ── BP Dashboard Launch ──────────────────────────────────────────────────────
+  // ── Unified LTI Dashboard Launch (teacher entry point) ────────────────────────────
   const launchBpDashboard = async () => {
     try {
       const token = useAuthStore.getState().token;
@@ -2095,23 +2095,21 @@ function EnrollmentsTable({
         body: JSON.stringify({
           courseId: course?._id || course?.courseId,
           courseVersionId: course?.versions?.[0] || '',
-          activityTitle: 'Brownie Points Management',
+          activityTitle: 'Activities & BP Dashboard',
           role: 'Instructor',
         }),
       });
       const data = await res.json();
       if (data.success && data.launchUrl && data.token) {
-        // Set modal state instead of opening new tab
-        setBrowniePointsLaunchUrl(data.launchUrl);
-        setBrowniePointsToken(data.token);
-        setIsBrowniePointsModalOpen(true);
+        // Open the unified LTI dashboard in the SAME window
+        window.location.href = `${data.launchUrl}?lti_token=${data.token}&mode=dashboard`;
       } else {
-        console.error('[BP Launch]', data.error);
-        toast.error('Failed to launch Brownie Points dashboard');
+        console.error('[Dashboard Launch]', data.error);
+        toast.error('Failed to launch Activities & BP dashboard');
       }
     } catch (err) {
-      console.error('[BP Launch] Failed:', err);
-      toast.error('Error launching Brownie Points dashboard');
+      console.error('[Dashboard Launch] Failed:', err);
+      toast.error('Error launching Activities & BP dashboard');
     }
   };
 
@@ -2171,7 +2169,7 @@ function EnrollmentsTable({
               className="flex items-center gap-2"
             >
               <Heart className="h-4 w-4" />
-              <span>Manage Brownie Points</span>
+              <span>Manage Activities &amp; BP</span>
             </Button>
           )}
 

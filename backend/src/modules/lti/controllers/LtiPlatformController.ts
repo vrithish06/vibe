@@ -124,8 +124,33 @@ export class LtiPlatformController {
         }
 
         const userId = (user as any).userId || user._id?.toString();
-        const userEmail = (user as any).email || '';
-        const userName = `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim() || (user as any).name || (user as any).fullName || (body.role === 'Instructor' ? 'Instructor' : 'Student');
+        const userEmail = (user as any).email || 'Unknown Email';
+        let extractedName = `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim();
+        if (!extractedName || extractedName.toLowerCase() === 'student') extractedName = (user as any).name || (user as any).fullName || '';
+        if (!extractedName || extractedName.toLowerCase() === 'student') extractedName = userEmail !== 'Unknown Email' ? userEmail.split('@')[0] : '';
+        
+        // ── Robust Role Resolution via Database Enrollment ──
+        let resolvedRole: 'Learner' | 'Instructor' = body.role || 'Learner';
+        try {
+            if (body.courseId && userId) {
+                const enrollmentCollection = await this.db.getCollection<any>('enrollment');
+                const enrollment = await enrollmentCollection.findOne({
+                    courseId: new ObjectId(body.courseId),
+                    userId: new ObjectId(userId),
+                    isDeleted: { $ne: true },
+                    status: 'ACTIVE'
+                });
+                if (enrollment) {
+                    if (['INSTRUCTOR', 'MANAGER', 'TA'].includes(enrollment.role)) {
+                        resolvedRole = 'Instructor';
+                    } else if (enrollment.role === 'STUDENT') {
+                        resolvedRole = 'Learner';
+                    }
+                }
+            }
+        } catch(e) { console.error('[LTI Launch] Failed to fetch db role:', e); }
+
+        const userName = extractedName || (resolvedRole === 'Instructor' ? 'Instructor' : 'Student');
         const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
 
         const payload: LtiLaunchPayload = {
@@ -136,7 +161,7 @@ export class LtiPlatformController {
             courseVersionId: body.courseVersionId,
             activityId,
             activityTitle: body.activityTitle,
-            role: body.role || 'Learner',
+            role: resolvedRole,
             toolId,
         };
 
@@ -166,8 +191,11 @@ export class LtiPlatformController {
         };
 
         const userId = (user as any).userId || user._id?.toString();
-        const userEmail = (user as any).email || '';
-        const userName = `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim() || 'Student';
+        const userEmail = (user as any).email || 'Unknown Email';
+        let extractedName = `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim();
+        if (!extractedName || extractedName.toLowerCase() === 'student') extractedName = (user as any).name || (user as any).fullName || '';
+        if (!extractedName || extractedName.toLowerCase() === 'student') extractedName = userEmail !== 'Unknown Email' ? userEmail.split('@')[0] : '';
+        const userName = extractedName || 'Student';
         const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
 
         const payload: LtiLaunchPayload = {
@@ -214,8 +242,32 @@ export class LtiPlatformController {
         }
 
         const userId = (user as any).userId || user._id?.toString();
-        const userEmail = (user as any).email || '';
-        const userName = `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim() || (user as any).name || (user as any).fullName || 'Instructor';
+        const userEmail = (user as any).email || 'Unknown Email';
+        let extractedName = `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim();
+        if (!extractedName || extractedName.toLowerCase() === 'student') extractedName = (user as any).name || (user as any).fullName || '';
+        if (!extractedName || extractedName.toLowerCase() === 'student') extractedName = userEmail !== 'Unknown Email' ? userEmail.split('@')[0] : '';
+        
+        let resolvedRole: 'Learner' | 'Instructor' = 'Instructor';
+        try {
+            if (body.courseId && userId) {
+                const enrollmentCollection = await this.db.getCollection<any>('enrollment');
+                const enrollment = await enrollmentCollection.findOne({
+                    courseId: new ObjectId(body.courseId),
+                    userId: new ObjectId(userId),
+                    isDeleted: { $ne: true },
+                    status: 'ACTIVE'
+                });
+                if (enrollment) {
+                    if (['INSTRUCTOR', 'MANAGER', 'TA'].includes(enrollment.role)) {
+                        resolvedRole = 'Instructor';
+                    } else if (enrollment.role === 'STUDENT') {
+                        resolvedRole = 'Learner';
+                    }
+                }
+            }
+        } catch(e) { console.error('[LTI DeepLink] Failed to fetch db role:', e); }
+
+        const userName = extractedName || resolvedRole;
         const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
 
         const payload = {
