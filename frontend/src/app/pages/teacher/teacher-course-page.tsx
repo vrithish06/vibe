@@ -152,7 +152,7 @@ function TeacherCourseContent() {
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const invitesRef = useRef<HTMLDivElement | null>(null);
   const [videoTab, setVideoTab] = useState("video");
-  const [isReorderEnabled,setIsReorderEnabled]=useState(false);
+  const [isReorderEnabled, setIsReorderEnabled] = useState(false);
 
 
 
@@ -1599,132 +1599,132 @@ function TeacherCourseContent() {
         />
       )} */}
       {/* {isDesktopSidebarVisible && ( */}
-        <SidebarResizablePanel
-          defaultSize={20}
-          minSize={20}
-          maxSize={50}
-          // className={`${isMobileSidebarOpen ? 'fixed inset-y-0 left-0 z-50 w-[280px]' : 'hidden md:block'}`}
-        >
-          {/* sidebar content */}
-          <div className="h-full overflow-hidden border-r border-border/40 bg-sidebar/50">
-            <Sidebar variant="sidebar" collapsible="none" className="h-screen w-full">
-              <SidebarHeader>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-3 px-3 py-2">
-                    <BookOpen className="text-primary" />
-                    <div>
-                      <h1 className="text-base font-bold">Vibe (Teacher)</h1>
-                      <p className="text-xs text-muted-foreground">Course Editor</p>
-                    </div>
+      <SidebarResizablePanel
+        defaultSize={20}
+        minSize={20}
+        maxSize={50}
+      // className={`${isMobileSidebarOpen ? 'fixed inset-y-0 left-0 z-50 w-[280px]' : 'hidden md:block'}`}
+      >
+        {/* sidebar content */}
+        <div className="h-full overflow-hidden border-r border-border/40 bg-sidebar/50">
+          <Sidebar variant="sidebar" collapsible="none" className="h-screen w-full">
+            <SidebarHeader>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3 px-3 py-2">
+                  <BookOpen className="text-primary" />
+                  <div>
+                    <h1 className="text-base font-bold">Vibe (Teacher)</h1>
+                    <p className="text-xs text-muted-foreground">Course Editor</p>
                   </div>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="icon"
-                          variant={isReorderEnabled ? "default" : "ghost"}
-                          className={`h-7 w-7 transition-all duration-200 ${isReorderEnabled ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-                          onClick={() => setIsReorderEnabled((prev) => !prev)}
-                        >
-                          {isReorderEnabled?<LockOpen className="h-4 w-4" />:<Lock className="h-4 w-4" />}
-                          <span className="sr-only">Toggle Reorder</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        {isReorderEnabled ? "Disable Reordering" : "Enable Reordering"}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
                 </div>
-                <Separator className="opacity-50" />
-              </SidebarHeader>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant={isReorderEnabled ? "default" : "ghost"}
+                        className={`h-7 w-7 transition-all duration-200 ${isReorderEnabled ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                        onClick={() => setIsReorderEnabled((prev) => !prev)}
+                      >
+                        {isReorderEnabled ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                        <span className="sr-only">Toggle Reorder</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      {isReorderEnabled ? "Disable Reordering" : "Enable Reordering"}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <Separator className="opacity-50" />
+            </SidebarHeader>
 
             <SidebarContent
               className="bg-card/50 pl-2"
 
-              >
-                <ScrollArea className="flex-1">
-                  <Reorder.Group
-                    axis="y"
-                    onReorder={(newOrder) => {
-                      pendingOrder.current = newOrder;
-                    }}
-                    values={initialModules}
-                  >
-                    <SidebarMenu className="space-y-2 text-sm pr-1 pt-2">
-                      {initialModules
-                        .slice()
-                        .sort((a: any, b: any) => a.order.localeCompare(b.order))
-                        .map((module: any) => (
-                          <SidebarMenuItem key={module.moduleId}>
-                            <Reorder.Item
-                              key={module.moduleId}
-                              value={module}
-                              as="div"
-                              drag={isReorderEnabled}
-                              className={module.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
-                              whileDrag={{ scale: 1.02 }}
-                              onDragEnd={() => {
-                                setInitialModules(pendingOrder.current);
-                                handleMoveModule(module.moduleId, versionId);
+            >
+              <ScrollArea className="flex-1">
+                <Reorder.Group
+                  axis="y"
+                  onReorder={(newOrder) => {
+                    pendingOrder.current = newOrder;
+                  }}
+                  values={initialModules}
+                >
+                  <SidebarMenu className="space-y-2 text-sm pr-1 pt-2">
+                    {initialModules
+                      .slice()
+                      .sort((a: any, b: any) => a.order.localeCompare(b.order))
+                      .map((module: any) => (
+                        <SidebarMenuItem key={module.moduleId}>
+                          <Reorder.Item
+                            key={module.moduleId}
+                            value={module}
+                            as="div"
+                            drag={isReorderEnabled}
+                            className={module.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
+                            whileDrag={{ scale: 1.02 }}
+                            onDragEnd={() => {
+                              setInitialModules(pendingOrder.current);
+                              handleMoveModule(module.moduleId, versionId);
+                            }}
+                          >
+                            <Button className="absolute top-0 right-0" size="icon" variant="ghost" onClick={(e) => handleHideModule(module.moduleId, !module.isHidden)} disabled={hidingModuleId === module.moduleId}>
+                              {hidingModuleId === module.moduleId ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : !module.isHidden ? (
+                                <Eye className="h-4 w-4" />
+                              ) : (
+                                <EyeOff className="h-4 w-4" />
+                              )}
+                              <span className="sr-only">Hide Module</span>
+                            </Button>
+                            <SidebarMenuButton
+                              onClick={() => {
+                                toggleModule(module.moduleId);
+                                setSelectedEntity({ type: "module", data: module });
+                                setIsEditingModule(false);
+                                setOriginalModuleData({
+                                  name: module.name,
+                                  description: module.description || ""
+                                });
                               }}
                             >
-                              <Button className="absolute top-0 right-0" size="icon" variant="ghost" onClick={(e) => handleHideModule(module.moduleId, !module.isHidden)} disabled={hidingModuleId === module.moduleId}>
-                                {hidingModuleId === module.moduleId ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : !module.isHidden ? (
-                                  <Eye className="h-4 w-4" />
-                                ) : (
-                                  <EyeOff className="h-4 w-4" />
-                                )}
-                                <span className="sr-only">Hide Module</span>
-                              </Button>
-                              <SidebarMenuButton
-                                onClick={() => {
-                                  toggleModule(module.moduleId);
-                                  setSelectedEntity({ type: "module", data: module });
-                                  setIsEditingModule(false);
-                                  setOriginalModuleData({
-                                    name: module.name,
-                                    description: module.description || ""
-                                  });
-                                }}
-                              >
-                                <ChevronRight
-                                  className={`h-3.5 w-3.5 transition-transform ${expandedModules[module.moduleId] ? "rotate-90" : ""
-                                    }`}
-                                />
-                                <span className="ml-2 max-w-[35ch] truncate" title={module.name}>{module.name}</span>
-                              </SidebarMenuButton>
-                            </Reorder.Item>
+                              <ChevronRight
+                                className={`h-3.5 w-3.5 transition-transform ${expandedModules[module.moduleId] ? "rotate-90" : ""
+                                  }`}
+                              />
+                              <span className="ml-2 max-w-[35ch] truncate" title={module.name}>{module.name}</span>
+                            </SidebarMenuButton>
+                          </Reorder.Item>
 
-                            {expandedModules[module.moduleId] && (
-                              <Reorder.Group
-                                axis="y"
-                                values={module.sections}
-                                onReorder={(newSectionOrder) => {
-                                  pendingOrder.current[module.moduleId] = newSectionOrder;
-                                }}
-                              >
-                                <SidebarMenuSub className="ml-2">
-                                  {module.sections?.map((section: any) => (
-                                    <Reorder.Item
-                                      key={section.sectionId}
-                                      value={section}
-                                      drag={isReorderEnabled}
-                                      className={section.isHidden || module.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
-                                      whileDrag={{ scale: 1.02 }}
-                                      onDragEnd={() => {
-                                        setInitialModules((prev) =>
-                                          prev.map((mod) =>
-                                            mod.moduleId === module.moduleId
-                                              ? { ...mod, sections: pendingOrder.current[module.moduleId] }
-                                              : mod
-                                          )
-                                        );
-                                        handleMoveSection(module.moduleId, section.sectionId, versionId);
-                                      }}
-                                    >
+                          {expandedModules[module.moduleId] && (
+                            <Reorder.Group
+                              axis="y"
+                              values={module.sections}
+                              onReorder={(newSectionOrder) => {
+                                pendingOrder.current[module.moduleId] = newSectionOrder;
+                              }}
+                            >
+                              <SidebarMenuSub className="ml-2">
+                                {module.sections?.map((section: any) => (
+                                  <Reorder.Item
+                                    key={section.sectionId}
+                                    value={section}
+                                    drag={isReorderEnabled}
+                                    className={section.isHidden || module.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
+                                    whileDrag={{ scale: 1.02 }}
+                                    onDragEnd={() => {
+                                      setInitialModules((prev) =>
+                                        prev.map((mod) =>
+                                          mod.moduleId === module.moduleId
+                                            ? { ...mod, sections: pendingOrder.current[module.moduleId] }
+                                            : mod
+                                        )
+                                      );
+                                      handleMoveSection(module.moduleId, section.sectionId, versionId);
+                                    }}
+                                  >
 
                                     <div
                                       data-slot="sidebar-menu-sub-item"
@@ -1765,30 +1765,30 @@ function TeacherCourseContent() {
                                         <span className="sr-only">Hide Section</span>
                                       </Button>
 
-                                        {expandedSections[section.sectionId] && (
-                                          <Reorder.Group
-                                            axis="y"
-                                            values={sectionItems[section.sectionId] || []}
-                                            onReorder={(newItemOrder) => {
-                                              pendingOrderItems.current[section.sectionId] = newItemOrder;
-                                            }}
-                                          >
-                                            <SidebarMenuSub className="ml-4 space-y-1 pt-1">
-                                              {itemsLoading && activeSectionInfo?.sectionId === section.sectionId ? (
-                                                <div className="flex items-center justify-center py-4">
-                                                  <Loader />
-                                                </div>
-                                              ) : (sectionItems[section.sectionId] || [])
-                                                .slice()
-                                                .sort((a: any, b: any) => a.order.localeCompare(b.order))
-                                                .map((item: any) => (
-                                                  <Reorder.Item
-                                                    key={item._id}
-                                                    value={item}
-                                                    drag={isReorderEnabled}
-                                                    className={section.isHidden || module.isHidden || item.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
-                                                    whileDrag={{ scale: 1.02 }}
-                                                    onDragEnd={() => {
+                                      {expandedSections[section.sectionId] && (
+                                        <Reorder.Group
+                                          axis="y"
+                                          values={sectionItems[section.sectionId] || []}
+                                          onReorder={(newItemOrder) => {
+                                            pendingOrderItems.current[section.sectionId] = newItemOrder;
+                                          }}
+                                        >
+                                          <SidebarMenuSub className="ml-4 space-y-1 pt-1">
+                                            {itemsLoading && activeSectionInfo?.sectionId === section.sectionId ? (
+                                              <div className="flex items-center justify-center py-4">
+                                                <Loader />
+                                              </div>
+                                            ) : (sectionItems[section.sectionId] || [])
+                                              .slice()
+                                              .sort((a: any, b: any) => a.order.localeCompare(b.order))
+                                              .map((item: any) => (
+                                                <Reorder.Item
+                                                  key={item._id}
+                                                  value={item}
+                                                  drag={isReorderEnabled}
+                                                  className={section.isHidden || module.isHidden || item.isHidden ? "focus:outline-none opacity-60" : "focus:outline-none"}
+                                                  whileDrag={{ scale: 1.02 }}
+                                                  onDragEnd={() => {
 
                                                     setSectionItems((prev) => {
                                                       const items = pendingOrderItems.current[section.sectionId] || prev[section.sectionId];
@@ -2224,38 +2224,6 @@ function TeacherCourseContent() {
                         <Plus className="h-3 w-3 mr-1" />
                         Add Module
                       </Button>
-                      <Button size="sm" variant="secondary" className="w-[250px] text-xs" onClick={async () => {
-                        try {
-                          const token = useAuthStore.getState().token;
-                          const toolId = import.meta.env.VITE_LTI_TOOL_ID || 'vibe-lti-tool';
-                          const res = await fetch(`${import.meta.env.VITE_BASE_URL}/lti/launch/${toolId}/bp-management`, {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                              Authorization: `Bearer ${token}`,
-                            },
-                            body: JSON.stringify({
-                              courseId: courseId || '',
-                              courseVersionId: versionId || '',
-                              activityTitle: 'Activities & BP Dashboard',
-                              role: 'Instructor',
-                            }),
-                          });
-                          const data = await res.json();
-                          if (data.success && data.launchUrl && data.token) {
-                            // Open LTI dashboard in the SAME window
-                            window.location.href = `${data.launchUrl}?lti_token=${data.token}&mode=dashboard`;
-                          } else {
-                            toast.error('Failed to launch Activities & BP dashboard');
-                          }
-                        } catch (err) {
-                          console.error('[Dashboard Launch] Failed:', err);
-                          toast.error('Error launching Activities & BP dashboard');
-                        }
-                      }}>
-                        <FileText className="h-3 w-3 mr-1" />
-                        Manage Activities & BP
-                      </Button>
                     </div>
                   </SidebarMenu>
                 </Reorder.Group>
@@ -2579,7 +2547,7 @@ function TeacherCourseContent() {
                         isDestructive={true}
                         isLoading={isDeletingActivity}
                       />
-                      
+
                       {showActivitySubmissionsModal && (
                         <ActivitySubmissions
                           activityId={getIdStr(showActivitySubmissionsModal._id) || showActivitySubmissionsModal.id}
@@ -2925,42 +2893,91 @@ function TeacherCourseContent() {
                       )}
                       <div className="flex items-center gap-2">
                         {(selectedEntity.type === "module" || selectedEntity.type === "section") &&
-                        (isEditingModule || isEditingSection) &&
-                         (
-                          <Button
-                            onClick={() => {
-                              const moduleName = selectedEntity.data.name?.trim();
-                              const moduleDescription = selectedEntity.data.description?.trim() ?? "";
-                              const sectionName = selectedEntity.data.name?.trim();
-                              const sectionDescription = selectedEntity.data.description?.trim() ?? "";
-                              if (selectedEntity.type === "module") {
-                                if (!isEditingModule) {
-                                  setIsEditingModule(true);
-                                  setOriginalModuleData({
-                                    name: selectedEntity.data.name,
-                                    description: selectedEntity.data.description || ""
-                                  });
-                                  return;
-                                }
-
+                          (isEditingModule || isEditingSection) &&
+                          (
+                            <Button
+                              onClick={() => {
                                 const moduleName = selectedEntity.data.name?.trim();
                                 const moduleDescription = selectedEntity.data.description?.trim() ?? "";
-                                if (!moduleName || !moduleDescription) {
-                                  setErrors({
-                                    title: !moduleName ? "Module name is required." : "",
-                                    description: !moduleDescription
-                                      ? "Module description is required."
-                                      : moduleDescription.length >= MAX_DESCRIPTION_LENGTH
-                                        ? `Description must be ${MAX_DESCRIPTION_LENGTH} characters or less.`
-                                        : ""
-                                  });
+                                const sectionName = selectedEntity.data.name?.trim();
+                                const sectionDescription = selectedEntity.data.description?.trim() ?? "";
+                                if (selectedEntity.type === "module") {
+                                  if (!isEditingModule) {
+                                    setIsEditingModule(true);
+                                    setOriginalModuleData({
+                                      name: selectedEntity.data.name,
+                                      description: selectedEntity.data.description || ""
+                                    });
+                                    return;
+                                  }
+
+                                  const moduleName = selectedEntity.data.name?.trim();
+                                  const moduleDescription = selectedEntity.data.description?.trim() ?? "";
+                                  if (!moduleName || !moduleDescription) {
+                                    setErrors({
+                                      title: !moduleName ? "Module name is required." : "",
+                                      description: !moduleDescription
+                                        ? "Module description is required."
+                                        : moduleDescription.length >= MAX_DESCRIPTION_LENGTH
+                                          ? `Description must be ${MAX_DESCRIPTION_LENGTH} characters or less.`
+                                          : ""
+                                    });
+                                    return;
+                                  }
+
+                                  setErrors({ title: "", description: "" });
+                                  if (versionId) {
+                                    updateModuleAsync({
+                                      params: { path: { versionId, moduleId: selectedEntity.data.moduleId } },
+                                      body: {
+                                        name: selectedEntity.data.name,
+                                        description: selectedEntity.data.description || ""
+                                      }
+                                    }).then((res) => {
+                                      refetchVersion();
+                                      if (shouldFetchItems) {
+                                        refetchItems();
+                                      }
+                                      setIsEditingModule(false);
+                                    });
+                                  }
                                   return;
                                 }
 
+                                if (selectedEntity.type === "section") {
+                                  if (!isEditingSection) {
+                                    setIsEditingSection(true);
+                                    setOriginalSectionData({
+                                      name: selectedEntity.data.name,
+                                      description: selectedEntity.data.description || ""
+                                    });
+                                    return;
+                                  }
+                                  const sectionName = selectedEntity.data.name?.trim();
+                                  const sectionDescription = selectedEntity.data.description?.trim() ?? "";
+
+                                  if (!sectionName || !sectionDescription) {
+                                    setErrors({
+                                      title: !sectionName ? "Section name is required." : "",
+                                      description: !sectionDescription
+                                        ? "Section description is required."
+                                        : sectionDescription.length >= MAX_DESCRIPTION_LENGTH
+                                          ? `Description must be ${MAX_DESCRIPTION_LENGTH} characters or less.`
+                                          : ""
+                                    });
+                                    return;
+                                  }
+                                }
                                 setErrors({ title: "", description: "" });
-                                if (versionId) {
-                                  updateModuleAsync({
-                                    params: { path: { versionId, moduleId: selectedEntity.data.moduleId } },
+                                if (selectedEntity.type === "section" && versionId && selectedEntity.parentIds?.moduleId) {
+                                  updateSectionAsync({
+                                    params: {
+                                      path: {
+                                        versionId,
+                                        moduleId: selectedEntity.parentIds.moduleId,
+                                        sectionId: selectedEntity.data.sectionId
+                                      }
+                                    },
                                     body: {
                                       name: selectedEntity.data.name,
                                       description: selectedEntity.data.description || ""
@@ -2970,91 +2987,42 @@ function TeacherCourseContent() {
                                     if (shouldFetchItems) {
                                       refetchItems();
                                     }
-                                    setIsEditingModule(false);
+                                    setIsEditingSection(false);
                                   });
                                 }
-                                return;
-                              }
-
-                              if (selectedEntity.type === "section") {
-                                if (!isEditingSection) {
-                                  setIsEditingSection(true);
-                                  setOriginalSectionData({
-                                    name: selectedEntity.data.name,
-                                    description: selectedEntity.data.description || ""
-                                  });
-                                  return;
-                                }
-                                const sectionName = selectedEntity.data.name?.trim();
-                                const sectionDescription = selectedEntity.data.description?.trim() ?? "";
-
-                                if (!sectionName || !sectionDescription) {
-                                  setErrors({
-                                    title: !sectionName ? "Section name is required." : "",
-                                    description: !sectionDescription
-                                      ? "Section description is required."
-                                      : sectionDescription.length >= MAX_DESCRIPTION_LENGTH
-                                        ? `Description must be ${MAX_DESCRIPTION_LENGTH} characters or less.`
-                                        : ""
-                                  });
-                                  return;
-                                }
-                              }
-                              setErrors({ title: "", description: "" });
-                              if (selectedEntity.type === "section" && versionId && selectedEntity.parentIds?.moduleId) {
-                                updateSectionAsync({
-                                  params: {
-                                    path: {
-                                      versionId,
-                                      moduleId: selectedEntity.parentIds.moduleId,
-                                      sectionId: selectedEntity.data.sectionId
+                                if (selectedEntity.type === "item" && versionId && selectedEntity.parentIds?.moduleId && selectedEntity.parentIds?.sectionId) {
+                                  updateItemAsync({
+                                    params: {
+                                      path: {
+                                        versionId,
+                                        moduleId: selectedEntity.parentIds.moduleId,
+                                        sectionId: selectedEntity.parentIds.sectionId,
+                                        itemId: selectedEntity.data._id
+                                      }
+                                    },
+                                    body: {
+                                      name: selectedEntity.data.name,
+                                      description: selectedEntity.data.description || ""
                                     }
-                                  },
-                                  body: {
-                                    name: selectedEntity.data.name,
-                                    description: selectedEntity.data.description || ""
-                                  }
-                                }).then((res) => {
-                                  refetchVersion();
-                                  if (shouldFetchItems) {
-                                    refetchItems();
-                                  }
-                                  setIsEditingSection(false);
-                                });
-                              }
-                              if (selectedEntity.type === "item" && versionId && selectedEntity.parentIds?.moduleId && selectedEntity.parentIds?.sectionId) {
-                                updateItemAsync({
-                                  params: {
-                                    path: {
-                                      versionId,
-                                      moduleId: selectedEntity.parentIds.moduleId,
-                                      sectionId: selectedEntity.parentIds.sectionId,
-                                      itemId: selectedEntity.data._id
-                                    }
-                                  },
-                                  body: {
-                                    name: selectedEntity.data.name,
-                                    description: selectedEntity.data.description || ""
-                                  }
-                                }).then((res) => {
-                                  refetchVersion();
-                                  refetchItems(); refetchItem()
-                                });
-                              }
-                            }}
-                            variant={isEditingModule || isEditingSection ? "default" : "ghost"}
-                            size={isEditingModule || isEditingSection ? "default" : "icon"}
-                            className={isEditingModule || isEditingSection ? 
-                              "bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 transition-all duration-300" : "h-8 w-8"}
-                          >
-                             {isEditingModule || isEditingSection ? (
-                              'Save Changes'
-                            ) : (
-                              <Pencil className="h-4 w-4" />
-                            )}
-                            <span className="sr-only">Edit {selectedEntity.type}</span>
-                          </Button>
-                        )}
+                                  }).then((res) => {
+                                    refetchVersion();
+                                    refetchItems(); refetchItem()
+                                  });
+                                }
+                              }}
+                              variant={isEditingModule || isEditingSection ? "default" : "ghost"}
+                              size={isEditingModule || isEditingSection ? "default" : "icon"}
+                              className={isEditingModule || isEditingSection ?
+                                "bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 transition-all duration-300" : "h-8 w-8"}
+                            >
+                              {isEditingModule || isEditingSection ? (
+                                'Save Changes'
+                              ) : (
+                                <Pencil className="h-4 w-4" />
+                              )}
+                              <span className="sr-only">Edit {selectedEntity.type}</span>
+                            </Button>
+                          )}
 
                         {((selectedEntity.type === "module" && isEditingModule) || (selectedEntity.type === "section" && isEditingSection)) && (
                           <Button

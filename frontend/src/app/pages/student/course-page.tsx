@@ -1859,14 +1859,37 @@ export default function CoursePage() {
                     {isExternalBP && (
                       <SidebarMenuItem>
                         <SidebarMenuButton
-                          onClick={() => setShowBrowniePoints(true)}
-                          className={`h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm ${showBrowniePoints ? 'bg-accent/20 text-accent-foreground font-semibold' : ''}`}
+                          onClick={async () => {
+                            try {
+                              const token = localStorage.getItem('firebase-auth-token');
+                              const res = await fetch(
+                                `${import.meta.env.VITE_BASE_URL}/lti/student-bp-launch/${COURSE_ID}`,
+                                {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    Authorization: `Bearer ${token}`,
+                                  },
+                                }
+                              );
+                              const data = await res.json();
+                              if (data.success && data.launchUrl && data.token) {
+                                window.location.href = `${data.launchUrl}?lti_token=${data.token}&mode=dashboard`;
+                              } else {
+                                alert('Failed to launch Activities & BP: ' + (data.error || 'Unknown error'));
+                              }
+                            } catch (err) {
+                              console.error('[LTI Student Launch] Failed:', err);
+                              alert('Could not connect to LTI system. Please try again.');
+                            }
+                          }}
+                          className="h-9 px-3 w-full rounded-lg transition-all duration-200 hover:bg-gradient-to-r hover:from-accent/20 hover:to-accent/5 hover:shadow-sm"
                         >
                           <div className="flex items-center gap-3">
                             <div className="p-1 rounded-md bg-accent/15">
                               <Activity className="h-4 w-4 text-accent-foreground" />
                             </div>
-                            <span className="text-sm font-medium">Brownie Points</span>
+                            <span className="text-sm font-medium">Activities & BP</span>
                           </div>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
