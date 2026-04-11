@@ -20,6 +20,7 @@ export interface LtiLaunchPayload {
     userName: string;
     courseId: string;
     courseVersionId: string;
+    courseName?: string;
     activityId: string;
     activityTitle: string;
     role: 'Learner' | 'Instructor';
@@ -139,6 +140,7 @@ export class LtiPlatformService {
             'https://purl.imsglobal.org/spec/lti/claim/context': {
                 id: payload.courseVersionId,
                 label: payload.courseId,
+                title: payload.courseName || payload.courseId,
                 type: ['CourseSection'],
             },
 
@@ -195,6 +197,7 @@ export class LtiPlatformService {
             'https://purl.imsglobal.org/spec/lti/claim/context': {
                 id: payload.courseVersionId,
                 label: payload.courseId,
+                title: payload.courseName || payload.courseId,
                 type: ['CourseSection'],
             },
             'https://vibe.learning/custom_claims/activity_title': payload.activityTitle,

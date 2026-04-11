@@ -150,6 +150,17 @@ export class LtiPlatformController {
             }
         } catch(e) { console.error('[LTI Launch] Failed to fetch db role:', e); }
 
+        let courseName = '';
+        try {
+            if (body.courseId) {
+                const courseCollection = await this.db.getCollection<any>('newCourse');
+                const course = await courseCollection.findOne({ _id: new ObjectId(body.courseId) });
+                if (course) {
+                    courseName = course.name;
+                }
+            }
+        } catch(e) { console.error('[LTI Launch] Failed to fetch db courseName:', e); }
+
         const userName = extractedName || (resolvedRole === 'Instructor' ? 'Instructor' : 'Student');
         const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
 
@@ -159,6 +170,7 @@ export class LtiPlatformController {
             userName,
             courseId: body.courseId,
             courseVersionId: body.courseVersionId,
+            courseName,
             activityId,
             activityTitle: body.activityTitle,
             role: resolvedRole,
@@ -267,6 +279,17 @@ export class LtiPlatformController {
             }
         } catch(e) { console.error('[LTI DeepLink] Failed to fetch db role:', e); }
 
+        let courseName = '';
+        try {
+            if (body.courseId) {
+                const courseCollection = await this.db.getCollection<any>('newCourse');
+                const course = await courseCollection.findOne({ _id: new ObjectId(body.courseId) });
+                if (course) {
+                    courseName = course.name;
+                }
+            }
+        } catch(e) { console.error('[LTI DeepLink] Failed to fetch db courseName:', e); }
+
         const userName = extractedName || resolvedRole;
         const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
 
@@ -276,6 +299,7 @@ export class LtiPlatformController {
             userName,
             courseId: body.courseId,
             courseVersionId: body.courseVersionId,
+            courseName,
             toolId,
             activityTitle: body.activityTitle || ''
         };
