@@ -19,6 +19,7 @@ export interface LtiLaunchPayload {
     userEmail: string;
     userName: string;
     courseId: string;
+    courseName?: string;
     courseVersionId: string;
     activityId: string;
     activityTitle: string;
@@ -139,6 +140,7 @@ export class LtiPlatformService {
             'https://purl.imsglobal.org/spec/lti/claim/context': {
                 id: payload.courseVersionId,
                 label: payload.courseId,
+                title: payload.courseName,
                 type: ['CourseSection'],
             },
 

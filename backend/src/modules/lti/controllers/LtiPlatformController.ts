@@ -66,8 +66,14 @@ export class LtiPlatformController {
                 status: 'ACTIVE',
                 isDeleted: { $ne: true },
             })
-            .project({ userId: 1, _id: 0 })
+            .project({ userId: 1, percentCompleted: 1, _id: 0 })
             .toArray();
+
+        // Build a quick lookup map: userId → percentCompleted
+        const progressMap: Record<string, number> = {};
+        for (const e of enrollments) {
+            progressMap[e.userId.toString()] = e.percentCompleted ?? 0;
+        }
 
         // Get user repo from di container to ensure correctly typed queries
         const userRepo: any = req.container?.get(GLOBAL_TYPES.UserRepo) 
@@ -76,11 +82,18 @@ export class LtiPlatformController {
         const stringIds = enrollments.map((e: any) => e.userId.toString());
         const users = await userRepo.getUsersByIds(stringIds);
 
-        const members = users.map((u: any) => ({
-            userId: u._id.toString(),
-            name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Unknown Student',
-            email: u.email || '',
-        }));
+        const members = users.map((u: any) => {
+            const uid = u._id.toString();
+            return {
+                userId: uid,
+                studentId: uid,
+                studentName: `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Unknown Student',
+                studentEmail: u.email || '',
+                name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Unknown Student',
+                email: u.email || '',
+                percentCompleted: progressMap[uid] ?? 0,
+            };
+        });
 
         console.log(`[Vibe] NRPS returning ${members.length} members for course ${courseName} (${courseId})`);
         return { members, courseName };
@@ -131,6 +144,7 @@ export class LtiPlatformController {
         
         // ── Robust Role Resolution via Database Enrollment ──
         let resolvedRole: 'Learner' | 'Instructor' = body.role || 'Learner';
+        let fetchedCourseName = '';
         try {
             if (body.courseId && userId) {
                 const enrollmentCollection = await this.db.getCollection<any>('enrollment');
@@ -147,8 +161,12 @@ export class LtiPlatformController {
                         resolvedRole = 'Learner';
                     }
                 }
+                
+                const courseCollection = await this.db.getCollection<any>('newCourse');
+                const course = await courseCollection.findOne({ _id: new ObjectId(body.courseId) });
+                if (course) fetchedCourseName = course.name;
             }
-        } catch(e) { console.error('[LTI Launch] Failed to fetch db role:', e); }
+        } catch(e) { console.error('[LTI Launch] Failed to fetch db role/course details:', e); }
 
         const userName = extractedName || (resolvedRole === 'Instructor' ? 'Instructor' : 'Student');
         const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
@@ -158,6 +176,7 @@ export class LtiPlatformController {
             userEmail,
             userName,
             courseId: body.courseId,
+            courseName: fetchedCourseName,
             courseVersionId: body.courseVersionId,
             activityId,
             activityTitle: body.activityTitle,
@@ -198,11 +217,21 @@ export class LtiPlatformController {
         const userName = extractedName || 'Student';
         const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
 
+        let fetchedCourseName = '';
+        try {
+            if (courseId) {
+                const courseCollection = await this.db.getCollection<any>('newCourse');
+                const course = await courseCollection.findOne({ _id: new ObjectId(courseId) });
+                if (course) fetchedCourseName = course.name;
+            }
+        } catch(e) { console.error('[LTI Launch] Failed to fetch db course details:', e); }
+
         const payload: LtiLaunchPayload = {
             userId,
             userEmail,
             userName,
             courseId,
+            courseName: fetchedCourseName,
             courseVersionId: '',
             activityId: 'bp-student-view',
             activityTitle: 'Brownie Points',
