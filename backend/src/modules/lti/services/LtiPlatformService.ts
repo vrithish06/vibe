@@ -162,6 +162,13 @@ export class LtiPlatformService {
                 scope: ['https://purl.imsglobal.org/spec/lti-ags/scope/score'],
                 lineitem: `${vibeBaseUrl}/api/lti/ags/${payload.toolId}/scores`,
             },
+
+            // NRPS (roster sync) — standard claim telling the tool where to fetch members.
+            // Tool uses POST /api/lti/token to get a Bearer token, then calls this URL.
+            'https://purl.imsglobal.org/spec/lti-nrps/claim/namesroleservice': {
+                context_memberships_url: `${vibeBaseUrl}/api/lti/nrps/${payload.courseId}`,
+                service_versions: ['2.0'],
+            },
         })
             .setProtectedHeader({ alg: 'RS256', kid: 'vibe-lti-key-1' })
             .setIssuedAt(now)

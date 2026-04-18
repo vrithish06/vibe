@@ -45,12 +45,25 @@ export class LtiPlatformController {
     @Get('/nrps/:courseId')
     async getNrpsRoster(@Req() req: any, @Param('courseId') courseId: string) {
         console.log(`[Vibe] Incoming NRPS request for course: ${courseId}`);
-        const secret = req.headers['x-lti-secret'];
+
+        // ── Auth: accept EITHER x-lti-secret (Vibe legacy) OR Bearer token (universal) ──
+        const secret   = req.headers['x-lti-secret'] as string | undefined;
+        const authHeader = req.headers['authorization'] as string | undefined;
         const expected = process.env.LTI_SHARED_SECRET || 'vibe-lti-shared-secret-change-in-production';
 
-        if (!secret || secret !== expected) {
-            console.error('[Vibe] NRPS Auth failed: Secret mismatch');
-            throw new UnauthorizedError('Invalid or missing x-lti-secret header');
+        let authorized = false;
+        if (secret && secret === expected) {
+            authorized = true; // Vibe legacy path
+        } else if (authHeader?.startsWith('Bearer ')) {
+            const bearerToken = authHeader.split(' ')[1];
+            // Import validateBearerToken from the OAuth controller
+            const { LtiOAuthController } = await import('./LtiOAuthController.js');
+            authorized = LtiOAuthController.validateBearerToken(bearerToken);
+        }
+
+        if (!authorized) {
+            console.error('[Vibe] NRPS Auth failed: neither x-lti-secret nor valid Bearer token');
+            throw new UnauthorizedError('Unauthorized — provide x-lti-secret or a valid Bearer token');
         }
 
         const enrollmentCollection = await this.db.getCollection<any>('enrollment');
