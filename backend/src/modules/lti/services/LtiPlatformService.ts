@@ -19,6 +19,7 @@ export interface LtiLaunchPayload {
     userEmail: string;
     userName: string;
     courseId: string;
+    courseName?: string;
     courseVersionId: string;
     courseName?: string;
     activityId: string;
@@ -48,7 +49,7 @@ async function loadOrGenerateKeys() {
             const { privateJwk, publicJwk } = JSON.parse(fs.readFileSync(KEY_FILE, 'utf-8'));
             // Import private key for signing; re-use the stored JWK for JWKS endpoint
             _privateKey = await importJWK(privateJwk, 'RS256');
-            _publicJwk  = { ...publicJwk, kid: 'vibe-lti-key-1', use: 'sig', alg: 'RS256' };
+            _publicJwk = { ...publicJwk, kid: 'vibe-lti-key-1', use: 'sig', alg: 'RS256' };
             console.log('[LTI] Loaded existing RSA key pair from disk.');
             return;
         }
@@ -59,8 +60,8 @@ async function loadOrGenerateKeys() {
     // Generate new key pair and persist it
     const { privateKey, publicKey } = await generateKeyPair('RS256', { modulusLength: 2048, extractable: true });
     _privateKey = privateKey;
-    _publicKey  = publicKey;
-    _publicJwk  = await exportJWK(publicKey);
+    _publicKey = publicKey;
+    _publicJwk = await exportJWK(publicKey);
     _publicJwk.kid = 'vibe-lti-key-1';
     _publicJwk.use = 'sig';
     _publicJwk.alg = 'RS256';
@@ -161,6 +162,13 @@ export class LtiPlatformService {
             'https://purl.imsglobal.org/spec/lti-ags/claim/endpoint': {
                 scope: ['https://purl.imsglobal.org/spec/lti-ags/scope/score'],
                 lineitem: `${vibeBaseUrl}/api/lti/ags/${payload.toolId}/scores`,
+            },
+
+            // NRPS (roster sync) — standard claim telling the tool where to fetch members.
+            // Tool uses POST /api/lti/token to get a Bearer token, then calls this URL.
+            'https://purl.imsglobal.org/spec/lti-nrps/claim/namesroleservice': {
+                context_memberships_url: `${vibeBaseUrl}/api/lti/nrps/${payload.courseId}`,
+                service_versions: ['2.0'],
             },
         })
             .setProtectedHeader({ alg: 'RS256', kid: 'vibe-lti-key-1' })

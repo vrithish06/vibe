@@ -4,6 +4,7 @@ import { LtiGradeService } from './services/LtiGradeService.js';
 import { LtiPlatformController } from './controllers/LtiPlatformController.js';
 import { LtiToolController } from './controllers/LtiToolController.js';
 import { LtiGradeController } from './controllers/LtiGradeController.js';
+import { LtiOAuthController } from './controllers/LtiOAuthController.js';
 
 export const ltiContainerModule = new ContainerModule(options => {
     options.bind(LtiPlatformService).toSelf().inSingletonScope();
@@ -11,4 +12,6 @@ export const ltiContainerModule = new ContainerModule(options => {
     options.bind(LtiPlatformController).toSelf().inSingletonScope();
     options.bind(LtiToolController).toSelf().inSingletonScope();
     options.bind(LtiGradeController).toSelf().inSingletonScope();
+    options.bind(LtiOAuthController).toSelf().inSingletonScope();
 });
+

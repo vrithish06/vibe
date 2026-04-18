@@ -423,6 +423,26 @@ class ProgressService extends BaseService {
       session,
       completedItemCount,
     );
+
+    // ── Fire LTI Milestone Webhook (background, non-blocking) ──────────────────
+    // Notify the LTI tool of the student's new completion percentage.
+    // The LTI tool checks if any VIBE_MILESTONE activities should award BP.
+    // Secured via x-lti-secret; replace with OAuth2 Bearer for generic LMS support.
+    if (!isReset && percentCompleted > 0) {
+      const LTI_URL = process.env.LTI_BACKEND_URL || 'http://localhost:3142';
+      const LTI_SECRET = process.env.LTI_SHARED_SECRET || 'vibe-lti-shared-secret-change-in-production';
+      fetch(`${LTI_URL}/api/lti/progress-webhook`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-lti-secret': LTI_SECRET,
+        },
+        body: JSON.stringify({ userId, courseId, percentCompleted }),
+      }).catch((err: Error) => {
+        // Silent fail — LTI tool being down should never block student progress
+        console.warn('[LTI Webhook] Failed to notify LTI of progress update:', err.message);
+      });
+    }
   }
 
   async updateEnrollmentProgressPercentBulk(
