@@ -228,49 +228,57 @@ export class LtiPlatformController {
         @CurrentUser() user: IUser,
         @Req() req: any,
     ) {
-        const courseId = req.params.courseId;
-
-        const tool = {
-            launchUrl: 'http://localhost:5174/',
-        };
-
-        const userId = (user as any).userId || user._id?.toString();
-        const userEmail = (user as any).email || 'Unknown Email';
-        let extractedName = `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim();
-        if (!extractedName || extractedName.toLowerCase() === 'student') extractedName = (user as any).name || (user as any).fullName || '';
-        if (!extractedName || extractedName.toLowerCase() === 'student') extractedName = userEmail !== 'Unknown Email' ? userEmail.split('@')[0] : '';
-        const userName = extractedName || 'Student';
-        const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
-
-        let fetchedCourseName = '';
         try {
-            if (courseId) {
-                const courseCollection = await this.db.getCollection<any>('newCourse');
-                const course = await courseCollection.findOne({ _id: new ObjectId(courseId) });
-                if (course) fetchedCourseName = course.name;
-            }
-        } catch(e) { console.error('[LTI Launch] Failed to fetch db course details:', e); }
+            const courseId = req.params.courseId;
 
-        const payload: LtiLaunchPayload = {
-            userId,
-            userEmail,
-            userName,
-            courseId,
-            courseName: fetchedCourseName,
-            courseVersionId: '',
-            activityId: 'bp-student-view',
-            activityTitle: 'Brownie Points',
-            role: 'Learner',
-            toolId: 'bp-tool',
-        };
+            const tool = {
+                launchUrl: 'http://localhost:5174/',
+            };
 
-        const token = await this.ltiPlatformService.generateLaunchToken(payload, vibeBaseUrl);
+            const userId = (user as any).userId || user._id?.toString();
+            const userEmail = (user as any).email || 'Unknown Email';
+            let extractedName = `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim();
+            if (!extractedName || extractedName.toLowerCase() === 'student') extractedName = (user as any).name || (user as any).fullName || '';
+            if (!extractedName || extractedName.toLowerCase() === 'student') extractedName = userEmail !== 'Unknown Email' ? userEmail.split('@')[0] : '';
+            const userName = extractedName || 'Student';
+            const vibeBaseUrl = appConfig.url || `http://localhost:${appConfig.port}`;
 
-        return {
-            success: true,
-            launchUrl: tool.launchUrl,
-            token,
-        };
+            let fetchedCourseName = '';
+            try {
+                if (courseId) {
+                    const courseCollection = await this.db.getCollection<any>('newCourse');
+                    const course = await courseCollection.findOne({ _id: new ObjectId(courseId) });
+                    if (course) fetchedCourseName = course.name;
+                }
+            } catch(e) { console.error('[LTI Launch] Failed to fetch db course details:', e); }
+
+            const payload: LtiLaunchPayload = {
+                userId,
+                userEmail,
+                userName,
+                courseId,
+                courseName: fetchedCourseName,
+                courseVersionId: '',
+                activityId: 'bp-student-view',
+                activityTitle: 'Brownie Points',
+                role: 'Learner',
+                toolId: 'bp-tool',
+            };
+
+            const token = await this.ltiPlatformService.generateLaunchToken(payload, vibeBaseUrl);
+
+            return {
+                success: true,
+                launchUrl: tool.launchUrl,
+                token,
+            };
+        } catch (err: any) {
+            console.error('[LTI studentBpLaunch] Error:', err?.message || err);
+            return {
+                success: false,
+                error: err?.message || 'Internal server error during LTI launch',
+            };
+        }
     }
 
     /**
